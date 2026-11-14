@@ -4,6 +4,8 @@
 
 **Criterio para recortar:** lo que más enseña DQN es programarlo. La teoría se limita a lo necesario para escribir el código y entender por qué falla.
 
+**Seguimiento del avance:** [CHECKLIST_DQN.md](CHECKLIST_DQN.md).
+
 ---
 
 ## 0. Setup (todos, 15 min)
