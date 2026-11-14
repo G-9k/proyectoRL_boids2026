@@ -1,2 +1,11 @@
-matplotlib==3.11.2
+# PyTorch en su versión CPU (alcanza para redes chicas como las de DQN acá).
+# Esta línea hace que pip busque torch en el índice CPU de PyTorch y no baje la versión CUDA (~2 GB) en Linux.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 numpy==2.5.4
+matplotlib==3.11.2
+torch==2.15.0
+gymnasium[classic-control]==1.4.0
+stable-baselines3==2.9.2
+tqdm==4.70.1
+rich==15.0.0
