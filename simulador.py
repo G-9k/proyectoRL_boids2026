@@ -14,6 +14,8 @@ En la ventana:
     Sirve para armar a mano la situación que quieras (también con la simulación pausada).
   - Teclas: espacio = play/pausa, s = un paso, r = reiniciar el mismo mapa, n = mapa nuevo,
     z = zoom / campo completo, flechas = mover al pastor en modo manual.
+  - Velocidad: pasos de simulación por segundo (tiempo real). Hasta ~40 pasos/s se dibuja cada paso;
+    más rápido, la pantalla va a ~50 cuadros/s y cada cuadro avanza un par de pasos.
 
 Con la simulación pausada, el panel muestra el valor Q (sin shaping) de las 9 acciones en el estado
 actual: qué haría el agente y con cuánta convicción.
@@ -22,13 +24,14 @@ import argparse
 import glob
 import os
 import textwrap
+import time
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch as th
 from matplotlib.patches import Circle
+from matplotlib.transforms import offset_copy
 from matplotlib.widgets import Button, RadioButtons, Slider
-from matplotlib.animation import FuncAnimation
 
 from entrenar_sb3 import DEFAULTS, cargar_escenarios, kwargs_entorno
 from Pastoreo_flechitas import L, TARGET, WORLD_MAX, WORLD_MIN, delta_shepherd, r_a, r_s
@@ -41,6 +44,10 @@ CONTROLES = ["DQN (modelo)", "Strömbom", "Manual (flechas)"]
 TECLAS_MATPLOTLIB = ("keymap.back", "keymap.forward", "keymap.home", "keymap.save", "keymap.fullscreen",
                      "keymap.pan", "keymap.zoom", "keymap.xscale", "keymap.yscale", "keymap.grid",
                      "keymap.grid_minor", "keymap.quit")
+MS_POR_CUADRO = 1           # el reloj consulta seguido; los pasos los marca el tiempo real, no el reloj
+MAX_PASOS_POR_CUADRO = 10   # si la máquina no da abasto, mejor ir más lento que saltar de a muchos pasos
+SEG_ENTRE_PANELES = 0.25    # el panel de números se refresca 4 veces por segundo (el texto es lo caro de dibujar)
+ANCHO_ETIQUETA = 17         # caracteres de la columna de etiquetas del panel ("Decide de nuevo: ")
 
 
 def mejor_checkpoint_mas_reciente() -> str:
@@ -64,7 +71,10 @@ class Simulador:
         self.semilla = semilla
         self.control = CONTROLES[0]
         self.jugando = False
-        self.velocidad = 2          # pasos de simulación por cuadro
+        self.velocidad = 30         # pasos de simulación por segundo
+        self.pendientes = 0.0       # fracción de paso acumulada entre cuadros
+        self.t_cuadro = self.t_panel = time.perf_counter()
+        self.fondo_campo = self.fondo_info = None   # lo que no se mueve, para el blitting
         self.zoom = True
         self.rng_strombom = np.random.default_rng(0)
 
@@ -212,9 +222,14 @@ class Simulador:
         self.ax_desc.axis("off")
         self.texto_desc = self.ax_desc.text(0, 1, "", va="top", fontsize=8.5, wrap=False)
 
+        # Panel de números en dos columnas: las etiquetas casi no cambian (van en el fondo) y los valores
+        # se redibujan en cada refresco. Dibujar texto cuesta ~50 µs por carácter, así que conviene
+        # redibujar solo los valores. Fuente monoespaciada: cada carácter mide 0,602 del tamaño.
         self.ax_info = f.add_axes([0.79, 0.20, 0.19, 0.58])
         self.ax_info.axis("off")
-        self.texto_info = self.ax_info.text(0, 1, "", va="top", fontsize=9, family="monospace")
+        self.texto_etiquetas = self.ax_info.text(0, 1, "", va="top", fontsize=9, family="monospace")
+        desplazamiento = offset_copy(self.ax_info.transAxes, fig=f, x=ANCHO_ETIQUETA * 0.602 * 9, units="points")
+        self.texto_info = self.ax_info.text(0, 1, "", va="top", fontsize=9, family="monospace", transform=desplazamiento)
 
         botones = [("Play / Pausa", self._play_pausa), ("Un paso", lambda e: self._un_paso()),
                    ("Reiniciar", lambda e: self.reiniciar()), ("Mapa nuevo", lambda e: self.reiniciar(self.semilla + 1))]
@@ -223,7 +238,7 @@ class Simulador:
             b = Button(f.add_axes([0.59 + i * 0.1, 0.11, 0.09, 0.05]), texto)
             b.on_clicked(fn)
             self.botones.append(b)
-        self.slider = Slider(f.add_axes([0.66, 0.065, 0.25, 0.025]), "Velocidad", 1, 20, valinit=self.velocidad, valstep=1)
+        self.slider = Slider(f.add_axes([0.66, 0.065, 0.25, 0.025]), "Pasos/s", 5, 300, valinit=self.velocidad, valstep=5)
         self.slider.on_changed(lambda v: setattr(self, "velocidad", int(v)))
         f.text(0.59, 0.012, "Teclas: espacio = play/pausa · s = un paso · r = reiniciar · n = mapa nuevo · z = zoom\n"
                             "Mouse: click izquierdo = mover al pastor · click derecho = mover al rebaño",
@@ -232,14 +247,38 @@ class Simulador:
         f.canvas.mpl_connect("key_press_event", self._tecla)
         f.canvas.mpl_connect("key_release_event", self._tecla_suelta)
         f.canvas.mpl_connect("button_press_event", self._click)
-        self.anim = FuncAnimation(f, self._cuadro, interval=30, blit=False, cache_frame_data=False)
+
+        # Blitting: lo que se mueve (pastor, ovejas, rastros, panel de números) se marca "animated" y
+        # el dibujo completo lo saltea. Cada vez que se dibuja todo (al arrancar, al cambiar de
+        # escenario, al tocar un botón) se guarda ese fondo fijo; en cada cuadro se pega el fondo y se
+        # dibuja encima solo lo que se mueve. Redibujar todo tarda ~0,3 s (el texto es caro), esto ~ms.
+        for a in self._animados_campo() + [self.texto_info]:
+            a.set_animated(True)
+        f.canvas.mpl_connect("draw_event", self._al_dibujar_todo)
+        self.reloj = f.canvas.new_timer(interval=MS_POR_CUADRO)
+        self.reloj.add_callback(self._cuadro)
+        self.reloj.start()
+        f.canvas.mpl_connect("close_event", lambda e: self.reloj.stop())
+
+    def _animados_campo(self):
+        animados = [self.rs_circle, self.stop_circle, self.fn_circle, self.rastro_pastor, self.rastro_centro,
+                    self.lejana, self.gcm, self.pastor]
+        return animados + ([self.ovejas] if self.ovejas is not None else [])
+
+    def _al_dibujar_todo(self, _):
+        c = self.fig.canvas
+        self.fondo_campo = c.copy_from_bbox(self.ax.bbox)
+        self.fondo_info = c.copy_from_bbox(self.ax_info.bbox)
+        for a in self._animados_campo():
+            self.ax.draw_artist(a)
+        self.ax_info.draw_artist(self.texto_info)
 
     def _nuevo_rebano_grafico(self):
         sim = self.env.sim
         if self.ovejas is not None:
             self.ovejas.remove()
         self.ovejas = self.ax.quiver(sim.A[:, 0], sim.A[:, 1], sim.H[:, 0], sim.H[:, 1], color="#2c3e50",
-                                     scale=30, width=0.0045, headwidth=4, zorder=4)
+                                     scale=30, width=0.0045, headwidth=4, zorder=4, animated=True)
         self.fn_circle.set_radius(sim.f_N)
         self.meta.set_radius(sim.target_radius)
         if sim.bounds is not None:
@@ -260,21 +299,23 @@ class Simulador:
         self.ax.set_xlim(centro[0] - lado / 2, centro[0] + lado / 2)
         self.ax.set_ylim(centro[1] - lado / 2, centro[1] + lado / 2)
 
-    def _asegurar_visible(self):
-        """Si el pastor o alguna oveja se salen de la vista con zoom, la agranda para incluirlos."""
+    def _asegurar_visible(self) -> bool:
+        """Si el pastor o alguna oveja se salen de la vista con zoom, la agranda para incluirlos.
+        Devuelve True si cambió la vista (entonces hay que redibujar todo, no alcanza con el blitting)."""
         if not self.zoom:
-            return
+            return False
         sim = self.env.sim
         puntos = np.vstack([sim.A, sim.S[None]])
         (x0, x1), (y0, y1) = self.ax.get_xlim(), self.ax.get_ylim()
         if (puntos[:, 0].min() > x0 + 3 and puntos[:, 0].max() < x1 - 3
                 and puntos[:, 1].min() > y0 + 3 and puntos[:, 1].max() < y1 - 3):
-            return
-        lo = np.minimum([x0, y0], puntos.min(axis=0) - 20)
-        hi = np.maximum([x1, y1], puntos.max(axis=0) + 20)
+            return False
+        lo = np.minimum([x0, y0], puntos.min(axis=0) - 60)  # margen amplio: cada agrandada es un redibujo completo (~0,3 s)
+        hi = np.maximum([x1, y1], puntos.max(axis=0) + 60)
         centro, lado = (lo + hi) / 2, float(np.max(hi - lo))
         self.ax.set_xlim(centro[0] - lado / 2, centro[0] + lado / 2)
         self.ax.set_ylim(centro[1] - lado / 2, centro[1] + lado / 2)
+        return True
 
     def _actualizar_descripcion(self):
         p, e = self.params, self.escenarios[self.escenario]
@@ -294,6 +335,28 @@ class Simulador:
         self.texto_desc.set_text("\n".join(lineas))
 
     def dibujar(self):
+        """Redibuja la ventana entera (lento). Para cuando cambia algo fuera del campo o al pausar."""
+        self._actualizar_artistas(panel=True)
+        self.fig.canvas.draw_idle()
+
+    def _dibujar_rapido(self, panel: bool):
+        """Redibuja solo lo que se mueve, sobre el fondo guardado (blitting). panel=False deja los números como estaban."""
+        vista_cambio = self._actualizar_artistas(panel)
+        if vista_cambio or self.fondo_campo is None:
+            self.fig.canvas.draw_idle()
+            return
+        c = self.fig.canvas
+        c.restore_region(self.fondo_campo)
+        for a in self._animados_campo():
+            self.ax.draw_artist(a)
+        c.blit(self.ax.bbox)
+        if panel:
+            c.restore_region(self.fondo_info)
+            self.ax_info.draw_artist(self.texto_info)
+            c.blit(self.ax_info.bbox)
+
+    def _actualizar_artistas(self, panel: bool) -> bool:
+        """Pone los datos actuales en los dibujos. Devuelve True si cambió la vista del campo."""
         sim, env = self.env.sim, self.env
         self.ovejas.set_offsets(sim.A)
         self.ovejas.set_UVC(sim.H[:, 0], sim.H[:, 1])
@@ -307,51 +370,76 @@ class Simulador:
         rs, rg = np.array(self.rastro_S), np.array(self.rastro_gcm)
         self.rastro_pastor.set_data(rs[:, 0], rs[:, 1])
         self.rastro_centro.set_data(rg[:, 0], rg[:, 1])
-        self._asegurar_visible()
+        vista_cambio = self._asegurar_visible()
+        if panel:
+            self._actualizar_panel()
+        return vista_cambio
 
+    def _actualizar_panel(self):
+        """Arma el panel como pares (etiqueta, valor). Las etiquetas solo dependen del control elegido
+        y de si terminó el episodio, y en esos dos casos se redibuja todo, así que pueden ir en el fondo."""
+        sim, env = self.env.sim, self.env
         if self.terminado:
             estado = f"ÉXITO en {env.pasos} pasos" if sim.task_completed else "se acabó el tiempo"
         else:
             estado = "jugando" if self.jugando else "en pausa"
-        lineas = [
-            f"Estado : {estado}",
-            f"Mapa   : {self.semilla}",
-            f"Paso   : {env.pasos} / {env.max_pasos}",
-            f"GCM a la meta : {sim.dist_goal:6.1f} m",
-            f"Pastor-oveja  : {sim.min_dist_sheep:6.1f} m (más cercana)",
-            f"Dispersión    : {sim.d_max:6.1f} / f(N) {sim.f_N:.1f} m",
-            f"Compacto      : {'sí' if sim.d_max <= sim.f_N else 'no'}",
-            "",
-            "Q sin shaping por acción",
-            "(lo que el modelo espera ganar;",
-            " el máximo real es 1)",
+        filas = [
+            ("Estado", estado),
+            ("Mapa", str(self.semilla)),
+            ("Paso", f"{env.pasos} / {env.max_pasos}"),
+            ("GCM a la meta", f"{sim.dist_goal:6.1f} m"),
+            ("Pastor a oveja", f"{sim.min_dist_sheep:6.1f} m"),
+            ("Dispersión", f"{sim.d_max:6.1f} m"),
+            ("Cohesión f(N)", f"{sim.f_N:6.1f} m"),
+            ("Compacto", "sí" if sim.d_max <= sim.f_N else "no"),
+            ("", ""),
+            ("Q sin shaping por acción", ""),
+            ("(lo que el modelo espera ganar;", ""),
+            (" el máximo real es 1)", ""),
         ]
         mejor = int(np.argmax(self.q))
         for i, (nombre, flecha) in enumerate(zip(NOMBRES_ACCIONES, FLECHAS)):
-            marca = "  ◀ elige" if i == mejor else ""
-            lineas.append(f" {flecha} {nombre:<6} {self.q[i]:6.3f}{marca}")
+            filas.append((f" {flecha} {nombre}", f"{self.q[i]:6.3f}" + ("  ◀ elige" if i == mejor else "")))
         if self.control == CONTROLES[0] and not self.terminado:
-            lineas += ["", f"Decide de nuevo en {self.restantes} paso(s)" if self.restantes else "Decide en el próximo paso"]
+            filas += [("", ""), ("Decide de nuevo", f"en {self.restantes} paso(s)" if self.restantes else "ahora")]
         elif self.control != CONTROLES[0]:
-            lineas += ["", f"(manda {self.control.split()[0]}; los Q son", " solo informativos)"]
-        self.texto_info.set_text("\n".join(lineas))
-        self.fig.canvas.draw_idle()
+            filas += [("", ""), (f"(manda {self.control.split()[0]}; los Q son", ""), (" solo informativos)", "")]
+        self.texto_etiquetas.set_text("\n".join(e if not v else f"{e:<{ANCHO_ETIQUETA - 2}}:" for e, v in filas))
+        self.texto_info.set_text("\n".join(v for _, v in filas))
 
     # -----------------------------------------------------------------
     # Eventos
     # -----------------------------------------------------------------
-    def _cuadro(self, _):
-        if self.jugando:
-            for _ in range(self.velocidad):
-                self.paso()
-                if self.terminado:
-                    break
+    def _cuadro(self):
+        """Lo llama el reloj todo el tiempo. Avanza los pasos que tocan según el tiempo real que pasó:
+        a 30 pasos/s, un paso por cuadro; a 120 pasos/s (la pantalla da ~50 cuadros/s), dos o tres por cuadro."""
+        ahora = time.perf_counter()
+        dt, self.t_cuadro = ahora - self.t_cuadro, ahora
+        if not self.jugando or not plt.fignum_exists(self.fig.number):
+            return
+        self.pendientes = min(self.pendientes + dt * self.velocidad, MAX_PASOS_POR_CUADRO)
+        n = int(self.pendientes)
+        if n == 0:
+            return
+        self.pendientes -= n
+        for _ in range(n):
+            self.paso()
+            if self.terminado:
+                break
+        if self.terminado:
             self.dibujar()
+            return
+        panel = ahora - self.t_panel >= SEG_ENTRE_PANELES
+        if panel:
+            self.t_panel = ahora
+        self._dibujar_rapido(panel)
 
     def _play_pausa(self, _=None):
         if self.terminado:  # al terminar, play arranca un mapa nuevo
             self.reiniciar(self.semilla + 1)
         self.jugando = not self.jugando
+        self.pendientes = 0.0
+        self.t_cuadro = time.perf_counter()
         self.dibujar()
 
     def _un_paso(self):
