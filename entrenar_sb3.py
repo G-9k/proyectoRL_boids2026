@@ -74,8 +74,8 @@ DEFAULTS = dict(
 RUTA_ESCENARIOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "escenarios.yaml")
 RUTA_REGISTRO = os.path.join("resultados", "registro.csv")
 COLUMNAS_REGISTRO = [
-    "fecha", "nombre", "escenario", "cambios", "decisiones", "eval_final", "eval_max", "qmax_final",
-    "qmax_sin_shaping_final", "minutos", "estado",
+    "fecha", "nombre", "escenario", "cambios", "decisiones", "eval_final", "eval_max", "eval_max_decision",
+    "qmax_final", "qmax_sin_shaping_final", "minutos", "estado",
 ]
 
 
@@ -138,14 +138,20 @@ class EvalPeriodica(BaseCallback):
                 En el CSV y en las líneas [eval] también se guarda el valor crudo (con shaping),
                 que depende de lo lejos que esté la oveja y no sirve para comparar.
       eval    = % de éxito de la última evaluación (50 mapas fijos, sin exploración)
+
+    Si se pasa `ruta_mejor`, guarda ahí el modelo cada vez que una evaluación supera a la mejor
+    anterior: más % de éxito, o el mismo % en menos pasos. Ante un empate total se queda con el
+    primero, porque más adelante la sobreestimación puede crecer y terminar en un derrumbe.
     """
 
     ACTUALIZAR_BARRA_CADA = 200  # decisiones; actualizar en cada paso haría más lento el entrenamiento
 
-    def __init__(self, env_kwargs, cada, ruta_csv, episodios, barra=True):
+    def __init__(self, env_kwargs, cada, ruta_csv, episodios, barra=True, ruta_mejor=None):
         super().__init__()
         self.env_kwargs, self.cada, self.ruta_csv, self.episodios = env_kwargs, cada, ruta_csv, episodios
         self.barra = barra
+        self.ruta_mejor = ruta_mejor
+        self.mejor = None          # (éxito, pasos, decisión) de la mejor evaluación hasta ahora
         self.pbar = None
         self.ultima_eval = float("nan")
         self.evals = []            # % de éxito de cada evaluación, para el registro
@@ -170,6 +176,11 @@ class EvalPeriodica(BaseCallback):
             q_sin, q_crudo = self._qmax()
             linea = (f"  [eval] decisión {self.num_timesteps:>8,} | éxito {exito:5.1f}% | pasos {pasos:6.0f} | "
                      f"eps {self.model.exploration_rate:.2f} | Qmax {q_sin:.2f} (crudo {q_crudo:.2f})")
+            if self._es_mejor(exito, pasos):
+                self.mejor = (exito, pasos, self.num_timesteps)
+                if self.ruta_mejor:
+                    self.model.save(self.ruta_mejor)
+                    linea += " | * mejor, guardado"
             if self.pbar is not None:
                 self.pbar.write(linea)  # escribe arriba de la barra sin romperla
             else:
@@ -179,6 +190,13 @@ class EvalPeriodica(BaseCallback):
                 csv.writer(f).writerow([self.num_timesteps, exito, pasos, round(time.time() - self.t0, 1),
                                         round(q_crudo, 3), round(q_sin, 3)])
         return True
+
+    def _es_mejor(self, exito: float, pasos: float) -> bool:
+        if exito <= 0:
+            return False  # un modelo que no resuelve nada no vale la pena guardarlo
+        if self.mejor is None or exito > self.mejor[0]:
+            return True
+        return exito == self.mejor[0] and pasos < self.mejor[1]
 
     def _qmax(self) -> tuple[float, float]:
         """
@@ -348,7 +366,9 @@ def main():
     desde = f"escenario '{escenario}'" + (f" con cambios {cambios}" if cambios else "") if escenario else "argumentos"
     print(f"[{nombre}] ({desde}) entrenando {args.pasos:,} decisiones ...", flush=True)
     t0 = time.time()
-    callback = EvalPeriodica(env_kwargs, args.eval_cada, ruta_csv, args.eval_episodios, barra=not args.sin_barra)
+    os.makedirs("modelos", exist_ok=True)
+    callback = EvalPeriodica(env_kwargs, args.eval_cada, ruta_csv, args.eval_episodios, barra=not args.sin_barra,
+                             ruta_mejor=os.path.join("modelos", f"{nombre}_mejor"))
     interrumpido = False
     try:
         model.learn(args.pasos, callback=callback)
@@ -359,9 +379,9 @@ def main():
             callback.pbar.close()
         print(f"\n[{nombre}] interrumpido en la decisión {model.num_timesteps:,}. Guardando el modelo...")
 
-    os.makedirs("modelos", exist_ok=True)
     model.save(os.path.join("modelos", nombre))
     estado = "interrumpido" if interrumpido else "listo"
+    mejor = callback.mejor
 
     agregar_al_registro({
         "fecha": fecha,
@@ -371,6 +391,7 @@ def main():
         "decisiones": model.num_timesteps,
         "eval_final": callback.evals[-1] if callback.evals else "",
         "eval_max": max(callback.evals) if callback.evals else "",
+        "eval_max_decision": mejor[2] if mejor else "",
         "qmax_final": round(callback.ultimo_qmax, 3),
         "qmax_sin_shaping_final": round(callback.ultimo_qmax_sin_shaping, 3),
         "minutos": round((time.time() - t0) / 60, 1),
@@ -378,6 +399,9 @@ def main():
     })
     print(f"[{nombre}] {estado}. Curva en {ruta_csv}, modelo en modelos/{nombre}.zip, "
           f"fila agregada a {RUTA_REGISTRO}")
+    if mejor:
+        print(f"[{nombre}] mejor modelo: {mejor[0]:.0f}% en {mejor[1]:.0f} pasos, decisión {mejor[2]:,} "
+              f"-> modelos/{nombre}_mejor.zip")
 
 
 if __name__ == "__main__":

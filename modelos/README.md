@@ -1,6 +1,11 @@
 # modelos/
 
-Acá [entrenar_sb3.py](../entrenar_sb3.py) guarda los DQN de Stable-Baselines3 ya entrenados, uno por corrida (`<nombre>.zip`).
+Acá [entrenar_sb3.py](../entrenar_sb3.py) guarda los DQN de Stable-Baselines3 ya entrenados. Cada corrida deja dos archivos:
+
+- `<nombre>.zip`: el modelo al final del entrenamiento.
+- `<nombre>_mejor.zip`: el **mejor checkpoint**, es decir, el modelo de la evaluación con más % de éxito (si empata, el de menos pasos; si empata en todo, el primero). Hace falta porque DQN a veces aprende la tarea y después la olvida (en `angulo_90` pasó de 100% a 0%), así que el modelo final puede ser mucho peor que el mejor. La decisión en la que se guardó está en la columna `eval_max_decision` de [resultados/registro.csv](../resultados/registro.csv). Solo existe en corridas desde el 20/11/2026.
+
+Para verlo en acción: `python ver_agente.py <nombre>` (ver [ver_agente.py](../ver_agente.py)).
 
 **No se suben a git**: son binarios y se regeneran corriendo de nuevo el entrenamiento. Si alguien necesita un modelo puntual, se lo pasa aparte. La curva de aprendizaje y la configuración completa de cada modelo sí están en git, en [resultados/entrenamientos/](../resultados/entrenamientos/), con el mismo nombre.
 
@@ -48,7 +53,7 @@ nombre = "n1_potencial_gcm_reb20_pas20_k4_cerco_s0"
 config = json.load(open(f"resultados/entrenamientos/{nombre}.json", encoding="utf-8"))
 
 env = PastoreoEnv(**config["entorno"])   # el mismo entorno con el que se entrenó
-model = DQN.load(f"modelos/{nombre}")
+model = DQN.load(f"modelos/{nombre}_mejor")   # o f"modelos/{nombre}" para el modelo final
 
 obs, _ = env.reset(seed=0)
 accion, _ = model.predict(obs, deterministic=True)

@@ -12,3 +12,6 @@ modelos/*
 
 # Repositorio de Javier (tiene su propio git): se usa como referencia, no se duplica acá
 PastoreoDqn/
+
+# Animaciones de ver_agente.py (--guardar videos/<nombre>.gif): pesan varios MB y se regeneran
+videos/

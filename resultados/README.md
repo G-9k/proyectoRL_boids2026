@@ -13,6 +13,7 @@ Cada corrida de [entrenar_sb3.py](../entrenar_sb3.py) agrega una fila al termina
 | `cambios` | lo que se cambió por la terminal respecto del escenario, por ejemplo `gamma=0.95 seed=1` |
 | `decisiones` | cuántas decisiones se entrenó |
 | `eval_final`, `eval_max` | % de éxito en la última evaluación y en la mejor |
+| `eval_max_decision` | decisión en la que se dio la mejor evaluación (con empate en éxito, la de menos pasos). Desde el 20/11 ahí se guarda `modelos/<nombre>_mejor.zip`; en las corridas anteriores se completó a partir de la curva |
 | `qmax_final` | el mayor valor Q al final, crudo. Con shaping depende de lo lejos que esté la oveja: no sirve para comparar entre corridas |
 | `qmax_sin_shaping_final` | el mismo valor sin la parte del shaping (Q + Φ). Con cualquier recompensa, el retorno real máximo es 1: **si pasa claramente de 1, hay sobreestimación**. Solo en corridas desde el 19/11 a la noche |
 | `minutos`, `estado` | duración, y `listo` o `interrumpido` |
