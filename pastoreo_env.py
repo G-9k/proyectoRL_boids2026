@@ -38,11 +38,17 @@ from Pastoreo_flechitas import (
 def medir(sim: ManualStrombomEnv) -> dict:
     """Foto de las cantidades relevantes para la recompensa, en metros."""
     dist_ovejas_meta = np.linalg.norm(sim.A - TARGET, axis=1)
+    pastor_rel = sim.S - sim.gcm        # del centro del rebaño al pastor
+    detras = sim.gcm - TARGET           # de la meta al centro del rebaño: "detrás" es seguir en esa dirección
+    norma = np.linalg.norm(pastor_rel) * np.linalg.norm(detras)
     return {
         "dist_gcm_meta": sim.dist_goal,                  # centro del rebaño -> meta
         "dist_max_meta": float(dist_ovejas_meta.max()),  # oveja más lejana a la meta -> meta
         "dispersion_max": sim.d_max,                     # oveja más lejana al centro del rebaño
         "dist_pastor_oveja": sim.min_dist_sheep,         # pastor -> oveja más cercana
+        "dist_pastor_gcm": float(np.linalg.norm(pastor_rel)),
+        # cos del ángulo entre (pastor - centro) y (centro - meta): 1 = detrás, -1 = entre el rebaño y la meta
+        "cos_detras": float(np.dot(pastor_rel, detras) / norma) if norma > 1e-9 else 0.0,
     }
 
 
@@ -101,10 +107,49 @@ def recompensa_potencial_gcm_tiempo(antes, despues, terminated, gamma):
 recompensa_potencial_gcm_tiempo.potencial = phi_gcm
 
 
+ESCALA_POSICION = 50.0  # metros: a esta distancia del centro del rebaño, el factor de cercanía vale 1/2
+
+
+def phi_posicion(medidas):
+    """
+    Potencial de la posición del pastor respecto del rebaño y la meta, entre 0 y 1:
+        (1 + cos θ) / 2  *  D / (D + d)
+    θ = ángulo entre (pastor - centro del rebaño) y (centro del rebaño - meta); d = distancia pastor-centro.
+    Vale 1 justo detrás y pegado al rebaño, 0 entre el rebaño y la meta, y crece al acercarse desde
+    cualquier distancia (salvo justo delante del rebaño, donde vale 0 a cualquier distancia).
+    Siempre >= 0: este término no agrega premio por esperar lejos (ver GUIA_CONCEPTOS.md, 4.5).
+    """
+    angulo = (1.0 + medidas["cos_detras"]) / 2.0
+    cercania = ESCALA_POSICION / (ESCALA_POSICION + medidas["dist_pastor_gcm"])
+    return angulo * cercania
+
+
+def hacer_recompensa(peso_posicion: float, penalizacion: float):
+    """
+    Esparsa + shaping con Phi = phi_gcm + peso_posicion * phi_posicion, menos `penalizacion` por decisión.
+    Todo lo que es shaping está en Phi (basado en potencial), así que no se puede farmear.
+    """
+    def phi(medidas):
+        return phi_gcm(medidas) + peso_posicion * phi_posicion(medidas)
+
+    def recompensa(antes, despues, terminated, gamma):
+        return (recompensa_esparsa(antes, despues, terminated, gamma)
+                + _shaping(phi(antes), phi(despues), terminated, gamma)
+                - penalizacion)
+
+    recompensa.potencial = phi
+    return recompensa
+
+
 RECOMPENSAS = {
     "esparsa": recompensa_esparsa,
     "potencial_gcm": recompensa_potencial_gcm,
     "potencial_gcm_tiempo": recompensa_potencial_gcm_tiempo,
+    # Penalización doble: lejos de la meta, (gamma - 1) * phi_gcm ~ +0.01 anula la de 0.01
+    "potencial_gcm_tiempo_fuerte": hacer_recompensa(peso_posicion=0.0, penalizacion=2 * PENALIZACION_TIEMPO),
+    # Con la posición del pastor (detrás del rebaño, cerca), con dos pesos
+    "potencial_gcm_pos05_tiempo": hacer_recompensa(peso_posicion=0.5, penalizacion=PENALIZACION_TIEMPO),
+    "potencial_gcm_pos1_tiempo": hacer_recompensa(peso_posicion=1.0, penalizacion=PENALIZACION_TIEMPO),
 }
 
 

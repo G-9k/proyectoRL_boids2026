@@ -1,0 +1,56 @@
+{
+  "nombre": "n1_potencial_gcm_pos1_tiempo_reb80_pas80_k4_ddqn_s0",
+  "fecha": "2026-11-20T11:23:09",
+  "escenario": "rebano_80m",
+  "cambios_sobre_escenario": {
+    "double": true,
+    "recompensa": "potencial_gcm_pos1_tiempo"
+  },
+  "argumentos": {
+    "n_ovejas": 1,
+    "recompensa": "potencial_gcm_pos1_tiempo",
+    "dist_inicio_rebano": 80,
+    "dist_inicio_pastor": 80,
+    "angulo_pastor": null,
+    "repetir_accion": 4,
+    "cerco": false,
+    "max_pasos": 1000,
+    "pasos": 300000,
+    "seed": 0,
+    "gamma": 0.99,
+    "eval_cada": 20000,
+    "eval_episodios": 50,
+    "double": true,
+    "lr": 0.0005,
+    "buffer": 100000,
+    "nombre": null,
+    "sin_barra": true
+  },
+  "entorno": {
+    "n_ovejas": 1,
+    "recompensa": "potencial_gcm_pos1_tiempo",
+    "gamma": 0.99,
+    "max_pasos": 1000,
+    "cerco": false,
+    "dist_inicio_pastor": 80,
+    "dist_inicio_rebano": 80,
+    "repetir_accion": 4,
+    "angulo_pastor": null
+  },
+  "hiperparametros_dqn": {
+    "learning_rate": 0.0005,
+    "buffer_size": 100000,
+    "learning_starts": 5000,
+    "batch_size": 128,
+    "train_freq": 4,
+    "target_update_interval": 1000,
+    "exploration_fraction": 0.3,
+    "exploration_final_eps": 0.05,
+    "policy_kwargs": {
+      "net_arch": [
+        128,
+        128
+      ]
+    }
+  }
+}

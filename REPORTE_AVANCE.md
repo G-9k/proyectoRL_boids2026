@@ -1,6 +1,6 @@
 # Reporte de avance: Track B (entorno, recompensa y líneas base)
 
-**Fecha:** 20/11/2026 (actualizado; la versión anterior era del 19/11). **Rama:** `entorno-gym-sb3` (todavía sin mergear a `main`).
+**Fecha:** 20/11/2026 (actualizado; incluye la fase 3). **Rama:** `entorno-gym-sb3` (todavía sin mergear a `main`).
 
 ## En una línea
 
@@ -50,7 +50,7 @@ De Javier rescatamos sus hiperparámetros, su script de estadística (`evaluaci�
 
 ### 1. El DQN común no resolvía ni el nivel trivial (19/11)
 
-Nivel trivial: 1 oveja a 40 m de la meta, pastor detrás y alineado, con cerco. Strömbom lo resuelve al 100% en ~32 pasos y el azar saca 36%. El DQN de SB3 quedó en 26–36%, por debajo del azar. La política era casi siempre la misma acción, alejándose hacia una esquina. Con un retorno máximo posible de 1, la red estimaba valores Q de 1,1–1,3 con diferencias entre acciones de 0,03–0,1: **sobreestimación** por el `max` del objetivo.
+Nivel trivial: 1 oveja a 40 m de la meta, pastor detrás y alineado, con cerco. Strömbom lo resuelve al 100% en ~32 pasos y el azar saca 36%. El DQN de SB3 quedó en 26–36%, por debajo del azar. La política era casi siempre la misma acción, alejándose hacia una esquina. Con un retorno máximo posible de 1, la red estimaba valores Q de 1,14–1,29 en 2 de 3 semillas, con apenas ~0,002–0,013 de diferencia entre la mejor acción y la segunda: **sobreestimación** por el `max` del objetivo.
 
 Antes, con el rebaño más lejos, tampoco había aprendido: desde ~150 m los valores Q daban iguales para las 9 acciones (el shaping es demasiado débil), y sin cerco el pastor aprendía a irse caminando.
 
@@ -65,7 +65,7 @@ Nivel trivial, 100k decisiones, 3 semillas. Se compara el promedio de las **últ
 | ídem + tasa de aprendizaje 1e-4 | 56% | 64 / 84 / 46 |
 | ídem + γ = 0,95 | 77% | 100 / 100 / 100 |
 
-La penalización por tiempo es −0,01 por decisión, sumada al shaping por potencial del centro del rebaño. No es shaping (cambia la tarea a "llegar rápido"), pero es seguro: la única forma de terminar el episodio es ganar. Aporta dos cosas: quedarse quieto deja de ser gratis, y los estados donde el agente no llega a la meta dejan de parecer buenos. Con esta variante, Q sin la parte del shaping queda en 0,89–0,96, por debajo de 1: ya no hay sobreestimación.
+La penalización por tiempo es −0,01 por decisión, sumada al shaping por potencial del centro del rebaño. No es shaping (cambia la tarea a "llegar rápido"), pero es seguro: la única forma de terminar el episodio es ganar. Aporta dos cosas: quedarse quieto deja de ser gratis, y los estados donde el agente no llega a la meta dejan de parecer buenos. Con esta variante, Q sin la parte del shaping queda en 0,89–0,96. Está dentro de lo posible (el valor real va de ~0,85 a 1 según el estado), cuando antes daba 1,1–1,3, imposible.
 
 Bajar la tasa de aprendizaje o γ no ayudó.
 
@@ -108,13 +108,35 @@ Cómo leerlo:
 
 Lo que muestra: el pastor arranca en cualquier lado de la oveja. En el primer y el último mapa arranca casi del lado opuesto (desviado 161° y 178° de la posición "detrás" respecto de la meta). **Primero la rodea hasta ponerse del lado opuesto a la meta y recién ahí la empuja en línea recta.** En unos 20 pasos baja a menos de ~20° de desvío y se mantiene ahí hasta llegar. Es la maniobra de arreo de Strömbom, aprendida solo a partir de la recompensa. Por eso esos dos mapas tardan más (46 y 61 pasos, contra 32–34 en los que arranca bien ubicado). Durante el arreo va pegado a la oveja, a 9–15 m en promedio, y casi no usa la acción "quieto" (0–12% de las decisiones).
 
+### 4. Lejos de la oveja: recompensa por la posición del pastor (fase 3, 20/11)
+
+Desde lejos, el potencial del centro del rebaño no da ninguna señal: si el pastor está a más de 65 m, la oveja no reacciona y nada de lo que haga el pastor cambia la recompensa. Probamos un segundo potencial que premia la **posición del pastor**: detrás del rebaño respecto de la meta y cerca:
+
+$$\Phi_{\text{pos}} = \frac{1+\cos\theta}{2} \cdot \frac{50}{50 + d}$$
+
+con $\theta$ el ángulo pastor–rebaño–meta y $d$ la distancia pastor–rebaño. Se suma al del centro del rebaño con un peso. Como es potencial, no se puede farmear. Además encontramos que lejos de la meta el shaping del centro del rebaño da +(1−γ)·d/L por decisión con el pastor quieto, lo que se come buena parte de la penalización por tiempo. Así que probamos también una penalización doble.
+
+Escenario `rebano_80m` (oveja a 80 m, pastor en cualquier lado, sin cerco; Strömbom 100% en 253 pasos, azar 4%), 300k decisiones, 3 semillas:
+
+| Recompensa | Últimas 3 evals | Mejor checkpoint en 100 mapas nuevos |
+|---|---|---|
+| Actual | 9% | 87 / 29 / 22 |
+| Penalización doble | 59% | 100 / 62 / 57 |
+| **Posición, peso 0,5** | **68%** | **80 / 95 / 99**, en 151–189 pasos |
+| Posición, peso 1 | 7% | 44 / 4 / 82 |
+
+- **La recompensa de posición funciona con peso 0,5** y es contraproducente con peso 1. Con peso alto, llegar a la meta casi no paga en el último paso: se pierde el potencial de posición, porque Φ(terminal) = 0.
+- La penalización doble también ayuda: la anulación pesaba.
+- En el escenario del paper aparecen los primeros éxitos (mejor checkpoint: 45% de mapas nuevos con peso 1), pero inestables.
+
+**Buffer de 1M contra el olvido:** no lo evita. En ±90°, con 1M (nada se descarta en 250k decisiones), 2 de 3 semillas igual se derrumbaron. La sospechosa principal sigue siendo la sobreestimación: Q sin shaping pasa de 1 antes de cada derrumbe.
+
+Explicación detallada de todos los conceptos en [GUIA_CONCEPTOS.md](GUIA_CONCEPTOS.md).
+
 ## Qué sigue
 
-1. **Atacar el olvido**, probando en ±90°, donde 2 de 3 semillas se derrumbaron:
-   - un replay buffer más grande (1M);
-   - bajar la tasa de aprendizaje una vez que converge;
-   - cortar el entrenamiento cuando Q sin shaping pasa de ~1,2 durante varias evaluaciones seguidas.
-2. **Currículum de distancia hacia el escenario del paper:** rebaño a 40 → 80 → 150 m, arrancando cada etapa desde el modelo de la anterior.
+1. **Escenario del paper:** posición 0,5 + penalización doble juntas, y currículum, arrancando desde los modelos que resuelven `rebano_80m`.
+2. **Atacar el olvido por el lado de la sobreestimación:** bajar la tasa de aprendizaje después de converger, actualizar la red target más despacio, o cortar cuando Q sin shaping pasa de ~1,2.
 3. **Recompensa de compactación para muchas ovejas.** Un círculo de radio f(N) = r_a·N^(2/3) centrado en el centro del rebaño (el umbral que usa Strömbom para pasar de recolectar a arrear). Se gana al entrar una oveja y se descuenta al salir. Hay que escribirlo como shaping basado en potencial, con γ: sin ella, "entrar ahora y salir después" da ganancia neta con descuento y se puede farmear. Tiene un tope natural, porque apretar un rebaño que ya está adentro no suma. Variante continua: penalizar cuánto se pasa cada oveja del círculo.
 4. **Criterio de éxito con muchas ovejas:** pasar a "centro en la meta y rebaño compacto", para que no valga un rebaño partido en dos con el centro justo en la meta.
 5. **Más adelante:** DQN contra PPO (mismas 9 acciones y también con acción continua), y una ablación del replay buffer y la red target, mejor con el DQN propio del Track A en CartPole.

@@ -35,6 +35,7 @@ n1_potencial_gcm_reb40_pas20_k4_cerco_s0
 | `mp{n}` (opcional) | `--max-pasos` | solo aparece si no es 1000, por ejemplo `mp1500` |
 | `ddqn` (opcional) | `--double` | entrenado con Double DQN ([double_dqn.py](../double_dqn.py)) en vez del DQN común |
 | `lr{x}` (opcional) | `--lr` | solo aparece si la tasa de aprendizaje no es 0.0005, por ejemplo `lr0.0001` |
+| `buf{n}` (opcional) | `--buffer` | solo aparece si el replay buffer no es de 100000 transiciones, por ejemplo `buf1000000` |
 | `v{n}` (al final) | — | ya existía una corrida con el mismo nombre (por ejemplo, la misma configuración con más decisiones); ver `resultados/registro.csv` para saber qué cambió |
 | `s{s}` | semilla | normalmente 0, 1 y 2 |
 

@@ -68,3 +68,27 @@ fecha,nombre,escenario,cambios,decisiones,eval_final,eval_max,eval_max_decision,
 2026-11-20T00:04:16,n1_potencial_gcm_tiempo_reb40_pas10_ang90_k4_cerco_ddqn_s1_v3,angulo_90,double=True recompensa=potencial_gcm_tiempo seed=1 pasos=250000,250000,100.0,100.0,120000,1.077,0.964,7.1,listo
 2026-11-20T00:04:16,n1_potencial_gcm_tiempo_reb40_pas10_ang90_k4_cerco_ddqn_s2_v3,angulo_90,double=True recompensa=potencial_gcm_tiempo seed=2 pasos=250000,250000,0.0,100.0,130000,9.065,8.797,8.6,listo
 2026-11-20T00:04:16,n1_potencial_gcm_tiempo_reb40_pas10_ang90_k4_cerco_ddqn_s0_v3,angulo_90,double=True recompensa=potencial_gcm_tiempo pasos=250000,250000,0.0,100.0,160000,9.421,8.412,8.6,listo
+2026-11-20T11:23:09,n1_potencial_gcm_tiempo_reb40_pas10_ang90_k4_cerco_ddqn_buf1000000_s1,angulo_90,double=True recompensa=potencial_gcm_tiempo buffer=1000000 seed=1 pasos=250000,250000,8.0,100.0,140000,1.823,1.392,24.7,listo
+2026-11-20T11:23:09,n1_potencial_gcm_tiempo_reb40_pas10_ang90_k4_cerco_ddqn_buf1000000_s0,angulo_90,double=True recompensa=potencial_gcm_tiempo buffer=1000000 pasos=250000,250000,100.0,100.0,190000,1.095,0.934,25.6,listo
+2026-11-20T11:23:10,n1_potencial_gcm_tiempo_reb40_pas10_ang90_k4_cerco_ddqn_buf1000000_s2,angulo_90,double=True recompensa=potencial_gcm_tiempo buffer=1000000 seed=2 pasos=250000,250000,0.0,100.0,130000,7.356,6.139,29.1,listo
+2026-11-20T11:23:10,n1_potencial_gcm_tiempo_fuerte_reb80_pas80_k4_ddqn_s2,rebano_80m,double=True recompensa=potencial_gcm_tiempo_fuerte seed=2,300000,14.0,60.0,280000,8.563,4.935,29.7,listo
+2026-11-20T11:23:09,n1_potencial_gcm_pos1_tiempo_reb80_pas80_k4_ddqn_s2,rebano_80m,double=True recompensa=potencial_gcm_pos1_tiempo seed=2,300000,14.0,80.0,180000,7.988,5.114,30.3,listo
+2026-11-20T11:23:09,n1_potencial_gcm_pos05_tiempo_reb80_pas80_k4_ddqn_s1,rebano_80m,double=True recompensa=potencial_gcm_pos05_tiempo seed=1,300000,90.0,100.0,280000,0.748,0.843,30.8,listo
+2026-11-20T11:23:10,n1_potencial_gcm_tiempo_reb80_pas80_k4_ddqn_s2,rebano_80m,double=True recompensa=potencial_gcm_tiempo seed=2,300000,24.0,24.0,300000,0.335,-0.869,30.9,listo
+2026-11-20T11:23:09,n1_potencial_gcm_pos05_tiempo_reborig_pasorig_k4_ddqn_s1,paper_1_oveja,double=True recompensa=potencial_gcm_pos05_tiempo seed=1 pasos=300000,300000,0.0,0.0,,0.365,-0.824,31.2,listo
+2026-11-20T11:23:08,n1_potencial_gcm_tiempo_fuerte_reb80_pas80_k4_ddqn_s0,rebano_80m,double=True recompensa=potencial_gcm_tiempo_fuerte,300000,88.0,100.0,260000,0.177,-0.357,31.4,listo
+2026-11-20T11:23:09,n1_potencial_gcm_pos05_tiempo_reb80_pas80_k4_ddqn_s0,rebano_80m,double=True recompensa=potencial_gcm_pos05_tiempo,300000,44.0,78.0,180000,7.979,2.127,31.5,listo
+2026-11-20T11:23:09,n1_potencial_gcm_pos1_tiempo_reborig_pasorig_k4_ddqn_s2,paper_1_oveja,double=True recompensa=potencial_gcm_pos1_tiempo seed=2 pasos=300000,300000,0.0,42.0,140000,4.659,3.21,31.5,listo
+2026-11-20T11:23:09,n1_potencial_gcm_pos05_tiempo_reborig_pasorig_k4_ddqn_s2,paper_1_oveja,double=True recompensa=potencial_gcm_pos05_tiempo seed=2 pasos=300000,300000,0.0,0.0,,0.023,-0.777,31.5,listo
+2026-11-20T11:23:09,n1_potencial_gcm_tiempo_fuerte_reborig_pasorig_k4_ddqn_s0,paper_1_oveja,double=True recompensa=potencial_gcm_tiempo_fuerte pasos=300000,300000,0.0,2.0,100000,-0.797,-1.728,31.6,listo
+2026-11-20T11:23:09,n1_potencial_gcm_pos1_tiempo_reb80_pas80_k4_ddqn_s0,rebano_80m,double=True recompensa=potencial_gcm_pos1_tiempo,300000,8.0,50.0,140000,6.422,4.069,31.7,listo
+2026-11-20T11:23:09,n1_potencial_gcm_pos1_tiempo_reborig_pasorig_k4_ddqn_s0,paper_1_oveja,double=True recompensa=potencial_gcm_pos1_tiempo pasos=300000,300000,0.0,4.0,160000,0.714,-0.547,31.8,listo
+2026-11-20T11:23:10,n1_potencial_gcm_tiempo_fuerte_reborig_pasorig_k4_ddqn_s2,paper_1_oveja,double=True recompensa=potencial_gcm_tiempo_fuerte seed=2 pasos=300000,300000,0.0,0.0,,-0.849,-1.829,31.8,listo
+2026-11-20T11:23:09,n1_potencial_gcm_pos1_tiempo_reborig_pasorig_k4_ddqn_s1,paper_1_oveja,double=True recompensa=potencial_gcm_pos1_tiempo seed=1 pasos=300000,300000,6.0,24.0,80000,-0.087,-0.159,31.8,listo
+2026-11-20T11:23:10,n1_potencial_gcm_pos1_tiempo_reb80_pas80_k4_ddqn_s1,rebano_80m,double=True recompensa=potencial_gcm_pos1_tiempo seed=1,300000,2.0,10.0,100000,10.491,5.432,31.8,listo
+2026-11-20T11:23:09,n1_potencial_gcm_tiempo_reb80_pas80_k4_ddqn_s1,rebano_80m,double=True recompensa=potencial_gcm_tiempo seed=1,300000,0.0,22.0,220000,-0.366,-0.92,32.0,listo
+2026-11-20T11:23:09,n1_potencial_gcm_pos05_tiempo_reb80_pas80_k4_ddqn_s2,rebano_80m,double=True recompensa=potencial_gcm_pos05_tiempo seed=2,300000,98.0,98.0,300000,0.782,0.984,32.1,listo
+2026-11-20T11:23:10,n1_potencial_gcm_tiempo_fuerte_reborig_pasorig_k4_ddqn_s1,paper_1_oveja,double=True recompensa=potencial_gcm_tiempo_fuerte seed=1 pasos=300000,300000,0.0,0.0,,-1.128,-1.851,32.0,listo
+2026-11-20T11:23:09,n1_potencial_gcm_tiempo_fuerte_reb80_pas80_k4_ddqn_s1,rebano_80m,double=True recompensa=potencial_gcm_tiempo_fuerte seed=1,300000,40.0,50.0,280000,-0.795,-3.233,32.3,listo
+2026-11-20T11:23:09,n1_potencial_gcm_tiempo_reb80_pas80_k4_ddqn_s0,rebano_80m,double=True recompensa=potencial_gcm_tiempo,300000,4.0,90.0,220000,3.789,1.368,32.4,listo
+2026-11-20T11:23:09,n1_potencial_gcm_pos05_tiempo_reborig_pasorig_k4_ddqn_s0,paper_1_oveja,double=True recompensa=potencial_gcm_pos05_tiempo pasos=300000,300000,0.0,12.0,180000,0.439,-0.322,32.6,listo

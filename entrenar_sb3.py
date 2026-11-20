@@ -67,6 +67,7 @@ DEFAULTS = dict(
     eval_episodios=50,
     double=False,
     lr=HIPERPARAMETROS["learning_rate"],
+    buffer=HIPERPARAMETROS["buffer_size"],
     nombre=None,
     sin_barra=False,
 )
@@ -107,6 +108,8 @@ def nombre_por_defecto(args) -> str:
         partes.append("ddqn")
     if args.lr != DEFAULTS["lr"]:
         partes.append(f"lr{args.lr:g}")
+    if args.buffer != DEFAULTS["buffer"]:
+        partes.append(f"buf{args.buffer}")
     partes.append(f"s{args.seed}")
     return "_".join(partes)
 
@@ -299,6 +302,8 @@ def leer_argumentos():
     p.add_argument("--eval-episodios", type=int, default=S, help=f"mapas por evaluación (default: {d['eval_episodios']})")
     p.add_argument("--lr", type=float, default=S,
                    help=f"tasa de aprendizaje (default: {d['lr']:g})")
+    p.add_argument("--buffer", type=int, default=S,
+                   help=f"tamaño del replay buffer, en transiciones (default: {d['buffer']})")
     p.add_argument("--double", action="store_true", default=S,
                    help="usar Double DQN en vez de DQN (ver double_dqn.py)")
     p.add_argument("--nombre", default=S, help="nombre de la corrida (default: se arma con los argumentos)")
@@ -355,7 +360,7 @@ def main():
             "cambios_sobre_escenario": cambios,
             "argumentos": vars(args),
             "entorno": env_kwargs,
-            "hiperparametros_dqn": {**HIPERPARAMETROS, "learning_rate": args.lr},
+            "hiperparametros_dqn": {**HIPERPARAMETROS, "learning_rate": args.lr, "buffer_size": args.buffer},
         }, f, indent=2, ensure_ascii=False)
 
     algoritmo = DoubleDQN if args.double else DQN
@@ -365,7 +370,7 @@ def main():
         gamma=args.gamma,
         seed=args.seed,
         verbose=0,
-        **{**HIPERPARAMETROS, "learning_rate": args.lr},
+        **{**HIPERPARAMETROS, "learning_rate": args.lr, "buffer_size": args.buffer},
     )
 
     desde = f"escenario '{escenario}'" + (f" con cambios {cambios}" if cambios else "") if escenario else "argumentos"

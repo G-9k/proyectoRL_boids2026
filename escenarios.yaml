@@ -88,6 +88,17 @@ rebano_20m:
   pasos: 60000
   eval_cada: 10000
 
+rebano_80m:
+  descripcion: >-
+    Paso intermedio hacia el paper. 1 oveja a 80 m de la meta, pastor en cualquier dirección
+    a 5-80 m de ella, sin cerco. Lejos de la oveja (más de 65 m) el pastor no la mueve.
+  n_ovejas: 1
+  dist_inicio_rebano: 80
+  dist_inicio_pastor: 80
+  repetir_accion: 4
+  pasos: 300000
+  eval_cada: 20000
+
 # ---------------------------------------------------------------------
 # Las tareas "de verdad" (como el paper)
 # ---------------------------------------------------------------------
