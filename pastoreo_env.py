@@ -66,18 +66,45 @@ def _shaping(phi_antes, phi_despues, terminated, gamma):
     return gamma * phi_despues - phi_antes
 
 
+def phi_gcm(medidas):
+    """Potencial: -distancia(centro del rebaño, meta) / L. Más cerca de la meta, mayor."""
+    return -medidas["dist_gcm_meta"] / L
+
+
 def recompensa_potencial_gcm(antes, despues, terminated, gamma):
-    """Esparsa + shaping con Phi = -distancia(centro del rebaño, meta) / L."""
-    phi_antes = -antes["dist_gcm_meta"] / L
-    phi_despues = -despues["dist_gcm_meta"] / L
+    """Esparsa + shaping con Phi = phi_gcm."""
     return recompensa_esparsa(antes, despues, terminated, gamma) + _shaping(
-        phi_antes, phi_despues, terminated, gamma
+        phi_gcm(antes), phi_gcm(despues), terminated, gamma
     )
+
+
+# Cada recompensa con shaping declara su potencial. Con shaping, el valor Q que aprende la red es
+# Q_sin_shaping(s, a) - Phi(s); declarar Phi permite volver a Q_sin_shaping para diagnosticar
+# (ver PastoreoEnv.potencial_actual y EvalPeriodica en entrenar_sb3.py).
+recompensa_potencial_gcm.potencial = phi_gcm
+
+
+PENALIZACION_TIEMPO = 0.01  # por decisión (no por paso de simulación)
+
+
+def recompensa_potencial_gcm_tiempo(antes, despues, terminated, gamma):
+    """
+    potencial_gcm - PENALIZACION_TIEMPO en cada decisión.
+    No es shaping basado en potencial: cambia la tarea a "llegar RÁPIDO". Como la única forma de
+    terminar el episodio es ganar, no incentiva cortar el episodio de otra manera.
+    Quedarse quieto para siempre vale -PENALIZACION_TIEMPO / (1 - gamma) (= -1 con gamma 0.99), así
+    que los lugares donde "no pasa nada" (por ejemplo, una esquina) dejan de parecer atractivos.
+    """
+    return recompensa_potencial_gcm(antes, despues, terminated, gamma) - PENALIZACION_TIEMPO
+
+
+recompensa_potencial_gcm_tiempo.potencial = phi_gcm
 
 
 RECOMPENSAS = {
     "esparsa": recompensa_esparsa,
     "potencial_gcm": recompensa_potencial_gcm,
+    "potencial_gcm_tiempo": recompensa_potencial_gcm_tiempo,
 }
 
 
@@ -237,6 +264,11 @@ class PastoreoEnv(gym.Env):
         self.sim.S = self.sim.gcm + distancia * np.array([np.cos(angulo), np.sin(angulo)])
         self.sim._apply_bounds()
         self.sim.update_metrics()
+
+    def potencial_actual(self) -> float:
+        """Phi del estado actual según la recompensa en uso (0 si la recompensa no tiene shaping)."""
+        phi = getattr(self.recompensa_fn, "potencial", None)
+        return float(phi(self._medidas)) if phi is not None else 0.0
 
     def _obs(self):
         return self.sim.get_dqn_state().astype(np.float32)

@@ -33,6 +33,7 @@ from tqdm import tqdm
 
 import yaml
 
+from double_dqn import DoubleDQN
 from pastoreo_env import PastoreoEnv, RECOMPENSAS
 
 SEED_EVAL = 20_000  # mapas de evaluación: SEED_EVAL + episodio (distintos de los de medir_strombom.py)
@@ -64,6 +65,8 @@ DEFAULTS = dict(
     gamma=0.99,
     eval_cada=20_000,
     eval_episodios=50,
+    double=False,
+    lr=HIPERPARAMETROS["learning_rate"],
     nombre=None,
     sin_barra=False,
 )
@@ -72,13 +75,13 @@ RUTA_ESCENARIOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "esce
 RUTA_REGISTRO = os.path.join("resultados", "registro.csv")
 COLUMNAS_REGISTRO = [
     "fecha", "nombre", "escenario", "cambios", "decisiones", "eval_final", "eval_max", "qmax_final",
-    "minutos", "estado",
+    "qmax_sin_shaping_final", "minutos", "estado",
 ]
 
 
 def nombre_por_defecto(args) -> str:
     """
-    n{ovejas}_{recompensa}_reb{dist}_pas{dist}[_ang{grados}]_k{repetir}[_cerco][_g{gamma}][_mp{max_pasos}]_s{semilla}
+    n{ovejas}_{recompensa}_reb{dist}_pas{dist}[_ang{grados}]_k{repetir}[_cerco][_g{gamma}][_mp{max_pasos}][_ddqn]_s{semilla}
     Ver modelos/README.md. "orig" = como en el paper (sin el parámetro de currículum).
     gamma y max_pasos solo aparecen si no son los valores por defecto (0.99 y 1000).
     """
@@ -100,6 +103,10 @@ def nombre_por_defecto(args) -> str:
         partes.append(f"g{args.gamma:g}")
     if args.max_pasos != DEFAULTS["max_pasos"]:
         partes.append(f"mp{args.max_pasos}")
+    if args.double:
+        partes.append("ddqn")
+    if args.lr != DEFAULTS["lr"]:
+        partes.append(f"lr{args.lr:g}")
     partes.append(f"s{args.seed}")
     return "_".join(partes)
 
@@ -125,8 +132,11 @@ class EvalPeriodica(BaseCallback):
       eps     = epsilon actual (probabilidad de acción al azar)
       ret     = recompensa promedio de los últimos 20 episodios de entrenamiento
       exito_t = % de éxito de los últimos 100 episodios de entrenamiento (con exploración)
-      Qmax    = el mayor valor Q que la red ve en el estado actual. Sirve para detectar
-                sobreestimación: con la recompensa esparsa, no debería pasar de 1.
+      Qmax    = el mayor valor Q de la red en el estado actual, SIN la parte que agrega el shaping
+                (Q + Phi(s)). Con cualquiera de nuestras recompensas, el retorno real máximo es 1
+                (llegar a la meta), así que si Qmax pasa claramente de 1 hay sobreestimación.
+                En el CSV y en las líneas [eval] también se guarda el valor crudo (con shaping),
+                que depende de lo lejos que esté la oveja y no sirve para comparar.
       eval    = % de éxito de la última evaluación (50 mapas fijos, sin exploración)
     """
 
@@ -139,7 +149,8 @@ class EvalPeriodica(BaseCallback):
         self.pbar = None
         self.ultima_eval = float("nan")
         self.evals = []            # % de éxito de cada evaluación, para el registro
-        self.ultimo_qmax = float("nan")
+        self.ultimo_qmax = float("nan")              # crudo, con shaping
+        self.ultimo_qmax_sin_shaping = float("nan")
         self.t0 = time.time()
 
     def _on_training_start(self):
@@ -156,9 +167,9 @@ class EvalPeriodica(BaseCallback):
             exito, pasos = evaluar(self.model, self.env_kwargs, self.episodios)
             self.ultima_eval = exito
             self.evals.append(exito)
-            q_max = self._qmax()
+            q_sin, q_crudo = self._qmax()
             linea = (f"  [eval] decisión {self.num_timesteps:>8,} | éxito {exito:5.1f}% | pasos {pasos:6.0f} | "
-                     f"eps {self.model.exploration_rate:.2f} | Qmax {q_max:.2f}")
+                     f"eps {self.model.exploration_rate:.2f} | Qmax {q_sin:.2f} (crudo {q_crudo:.2f})")
             if self.pbar is not None:
                 self.pbar.write(linea)  # escribe arriba de la barra sin romperla
             else:
@@ -166,15 +177,21 @@ class EvalPeriodica(BaseCallback):
                 print(f"{linea} | {fps:.0f} dec/s", flush=True)
             with open(self.ruta_csv, "a", newline="") as f:
                 csv.writer(f).writerow([self.num_timesteps, exito, pasos, round(time.time() - self.t0, 1),
-                                        round(q_max, 3)])
+                                        round(q_crudo, 3), round(q_sin, 3)])
         return True
 
-    def _qmax(self) -> float:
-        """El mayor valor Q que la red le da al estado actual del entrenamiento."""
+    def _qmax(self) -> tuple[float, float]:
+        """
+        (Qmax sin shaping, Qmax crudo) en el estado actual del entrenamiento.
+        Con shaping por potencial, la red aprende Q_crudo(s, a) = Q_sin_shaping(s, a) - Phi(s),
+        así que Q_sin_shaping = Q_crudo + Phi(s).
+        """
         with torch.no_grad():
             obs = torch.as_tensor(self.locals["new_obs"], device=self.model.device)
             self.ultimo_qmax = float(self.model.q_net(obs).max())
-        return self.ultimo_qmax
+        phi = self.training_env.env_method("potencial_actual")[0]
+        self.ultimo_qmax_sin_shaping = self.ultimo_qmax + phi
+        return self.ultimo_qmax_sin_shaping, self.ultimo_qmax
 
     def _resumen_vivo(self) -> str:
         eps_info = list(self.model.ep_info_buffer)[-20:]
@@ -182,7 +199,7 @@ class EvalPeriodica(BaseCallback):
         exitos = self.model.ep_success_buffer
         exito_t = 100.0 * np.mean(exitos) if len(exitos) else float("nan")
         return (f"eps={self.model.exploration_rate:.2f} ret={ret:.2f} exito_t={exito_t:.0f}% "
-                f"Qmax={self._qmax():.2f} eval={self.ultima_eval:.0f}%")
+                f"Qmax={self._qmax()[0]:.2f} eval={self.ultima_eval:.0f}%")
 
     def _on_training_end(self):
         if self.pbar is not None:
@@ -247,6 +264,10 @@ def leer_argumentos():
     p.add_argument("--gamma", type=float, default=S, help=f"descuento, por decisión (default: {d['gamma']})")
     p.add_argument("--eval-cada", type=int, default=S, help=f"evaluar cada N decisiones (default: {d['eval_cada']})")
     p.add_argument("--eval-episodios", type=int, default=S, help=f"mapas por evaluación (default: {d['eval_episodios']})")
+    p.add_argument("--lr", type=float, default=S,
+                   help=f"tasa de aprendizaje (default: {d['lr']:g})")
+    p.add_argument("--double", action="store_true", default=S,
+                   help="usar Double DQN en vez de DQN (ver double_dqn.py)")
     p.add_argument("--nombre", default=S, help="nombre de la corrida (default: se arma con los argumentos)")
     p.add_argument("--sin-barra", action="store_true", default=S,
                    help="sin barra de progreso, solo una línea por evaluación (para correr varias en paralelo)")
@@ -289,11 +310,17 @@ def main():
     nombre = args.nombre or nombre_por_defecto(args)
     carpeta = os.path.join("resultados", "entrenamientos")
     os.makedirs(carpeta, exist_ok=True)
+    # Si ya hay una corrida con ese nombre (por ejemplo, la misma config con más decisiones), no se pisa:
+    # se agrega _v2, _v3, ... El registro guarda qué cambió en cada una.
+    if not args.nombre and os.path.exists(os.path.join(carpeta, f"{nombre}.csv")):
+        base, n = nombre, 2
+        while os.path.exists(os.path.join(carpeta, f"{base}_v{n}.csv")):
+            n += 1
+        nombre = f"{base}_v{n}"
+        print(f"Ya existía una corrida '{base}'; esta se guarda como '{nombre}'.")
     ruta_csv = os.path.join(carpeta, f"{nombre}.csv")
-    if os.path.exists(ruta_csv):
-        print(f"AVISO: ya existía una corrida '{nombre}'; se sobrescriben su curva y su modelo.")
     with open(ruta_csv, "w", newline="") as f:
-        csv.writer(f).writerow(["paso", "exito_pct", "pasos_media", "segundos", "qmax"])
+        csv.writer(f).writerow(["paso", "exito_pct", "pasos_media", "segundos", "qmax", "qmax_sin_shaping"])
 
     # Configuración completa de la corrida, para poder reproducirla (el nombre no lo dice todo)
     fecha = datetime.now().isoformat(timespec="seconds")
@@ -305,16 +332,17 @@ def main():
             "cambios_sobre_escenario": cambios,
             "argumentos": vars(args),
             "entorno": env_kwargs,
-            "hiperparametros_dqn": HIPERPARAMETROS,
+            "hiperparametros_dqn": {**HIPERPARAMETROS, "learning_rate": args.lr},
         }, f, indent=2, ensure_ascii=False)
 
-    model = DQN(
+    algoritmo = DoubleDQN if args.double else DQN
+    model = algoritmo(
         "MlpPolicy",
         PastoreoEnv(**env_kwargs),
         gamma=args.gamma,
         seed=args.seed,
         verbose=0,
-        **HIPERPARAMETROS,
+        **{**HIPERPARAMETROS, "learning_rate": args.lr},
     )
 
     desde = f"escenario '{escenario}'" + (f" con cambios {cambios}" if cambios else "") if escenario else "argumentos"
@@ -344,6 +372,7 @@ def main():
         "eval_final": callback.evals[-1] if callback.evals else "",
         "eval_max": max(callback.evals) if callback.evals else "",
         "qmax_final": round(callback.ultimo_qmax, 3),
+        "qmax_sin_shaping_final": round(callback.ultimo_qmax_sin_shaping, 3),
         "minutos": round((time.time() - t0) / 60, 1),
         "estado": estado,
     })

@@ -13,7 +13,8 @@ Cada corrida de [entrenar_sb3.py](../entrenar_sb3.py) agrega una fila al termina
 | `cambios` | lo que se cambió por la terminal respecto del escenario, por ejemplo `gamma=0.95 seed=1` |
 | `decisiones` | cuántas decisiones se entrenó |
 | `eval_final`, `eval_max` | % de éxito en la última evaluación y en la mejor |
-| `qmax_final` | el mayor valor Q al final. Con la recompensa `esparsa`, más de 1 indica sobreestimación |
+| `qmax_final` | el mayor valor Q al final, crudo. Con shaping depende de lo lejos que esté la oveja: no sirve para comparar entre corridas |
+| `qmax_sin_shaping_final` | el mismo valor sin la parte del shaping (Q + Φ). Con cualquier recompensa, el retorno real máximo es 1: **si pasa claramente de 1, hay sobreestimación**. Solo en corridas desde el 19/11 a la noche |
 | `minutos`, `estado` | duración, y `listo` o `interrumpido` |
 
 Las corridas anteriores al registro (las del 19/11 con fecha "reconstruido") se cargaron a partir de sus archivos y no tienen `qmax_final`.
@@ -42,7 +43,8 @@ Una corrida de [entrenar_sb3.py](../entrenar_sb3.py) deja dos archivos con el mi
 | `exito_pct` | % de éxito en 50 mapas fijos (semillas 20000 a 20049), sin exploración |
 | `pasos_media` | pasos de simulación promedio en los episodios exitosos (vacío si no hubo ninguno) |
 | `segundos` | tiempo transcurrido desde que empezó el entrenamiento |
-| `qmax` | el mayor valor Q que la red le da al estado de entrenamiento en ese momento (solo en corridas nuevas) |
+| `qmax` | el mayor valor Q que la red le da al estado de entrenamiento en ese momento, crudo (solo en corridas nuevas) |
+| `qmax_sin_shaping` | lo mismo sin la parte del shaping; no debería pasar de 1 (solo en corridas nuevas) |
 
 **`<nombre>.json`: la configuración completa.** Tiene los argumentos del script, los parámetros del entorno y los hiperparámetros del DQN. Sirve para reproducir la corrida o para cargar el modelo con el mismo entorno.
 

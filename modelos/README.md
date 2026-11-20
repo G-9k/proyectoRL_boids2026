@@ -28,6 +28,9 @@ n1_potencial_gcm_reb40_pas20_k4_cerco_s0
 | `cerco` | `cerco=True` | ovejas y pastor no pueden salir de [-30, 180]² |
 | `g{γ}` (opcional) | `--gamma` | solo aparece si γ no es 0.99, por ejemplo `g0.95` |
 | `mp{n}` (opcional) | `--max-pasos` | solo aparece si no es 1000, por ejemplo `mp1500` |
+| `ddqn` (opcional) | `--double` | entrenado con Double DQN ([double_dqn.py](../double_dqn.py)) en vez del DQN común |
+| `lr{x}` (opcional) | `--lr` | solo aparece si la tasa de aprendizaje no es 0.0005, por ejemplo `lr0.0001` |
+| `v{n}` (al final) | — | ya existía una corrida con el mismo nombre (por ejemplo, la misma configuración con más decisiones); ver `resultados/registro.csv` para saber qué cambió |
 | `s{s}` | semilla | normalmente 0, 1 y 2 |
 
 El nombre **no** incluye todo. Quedan afuera, por ejemplo, la cantidad de pasos de entrenamiento, `max_pasos`, gamma y los hiperparámetros del DQN. Esos datos están en `resultados/entrenamientos/<nombre>.json`.
