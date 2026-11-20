@@ -102,6 +102,11 @@ class PastoreoEnv(gym.Env):
       dist_inicio_pastor: None = el pastor arranca como en el paper (cuarto inferior izquierdo).
              Un número = el pastor arranca en una dirección al azar, entre 5 m y esta distancia
              por fuera del borde del rebaño. Sirve para el currículum ("pastor cerca").
+      angulo_pastor: solo se usa junto con dist_inicio_pastor. None = la dirección del pastor
+             alrededor del rebaño es al azar (cualquier lado). Un número a (en grados) = el pastor
+             arranca DETRÁS del rebaño respecto de la meta (rebaño entre el pastor y la meta),
+             desviado al azar entre -a y +a de esa línea. 0 = perfectamente alineado;
+             180 = equivale a cualquier dirección.
       dist_inicio_rebano: None = el rebaño arranca como en el paper (cuarto superior derecho,
              ~150 m de la meta). Un número = el rebaño se traslada (sin cambiar su forma) para que
              su centro quede a esa distancia de la meta, en un ángulo al azar entre 0 y 90 grados.
@@ -124,6 +129,7 @@ class PastoreoEnv(gym.Env):
         dist_inicio_pastor: float | None = None,
         dist_inicio_rebano: float | None = None,
         repetir_accion: int = 1,
+        angulo_pastor: float | None = None,
     ):
         super().__init__()
         if isinstance(recompensa, str):
@@ -140,6 +146,9 @@ class PastoreoEnv(gym.Env):
         self.dist_inicio_pastor = dist_inicio_pastor
         self.dist_inicio_rebano = dist_inicio_rebano
         self.repetir_accion = int(repetir_accion)
+        self.angulo_pastor = angulo_pastor
+        if angulo_pastor is not None and dist_inicio_pastor is None:
+            raise ValueError("angulo_pastor necesita dist_inicio_pastor")
 
         self.sim = ManualStrombomEnv(
             n_sheep=n_ovejas,
@@ -217,7 +226,13 @@ class PastoreoEnv(gym.Env):
 
     def _ubicar_pastor_cerca(self):
         rng = self.np_random
-        angulo = rng.uniform(0.0, 2.0 * np.pi)
+        if self.angulo_pastor is None:
+            angulo = rng.uniform(0.0, 2.0 * np.pi)
+        else:
+            # Dirección "detrás del rebaño": de la meta hacia el centro del rebaño, y más allá
+            detras = self.sim.gcm - TARGET
+            desvio = np.deg2rad(float(self.angulo_pastor))
+            angulo = np.arctan2(detras[1], detras[0]) + rng.uniform(-desvio, desvio)
         distancia = self.sim.d_max + rng.uniform(5.0, max(5.0, float(self.dist_inicio_pastor)))
         self.sim.S = self.sim.gcm + distancia * np.array([np.cos(angulo), np.sin(angulo)])
         self.sim._apply_bounds()

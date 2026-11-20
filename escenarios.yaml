@@ -1,0 +1,108 @@
+# Escenarios con nombre para entrenar_sb3.py
+#
+# Uso:
+#   python entrenar_sb3.py trivial_case                       # el escenario tal cual
+#   python entrenar_sb3.py trivial_case --gamma 0.95 --seed 1  # cambiando algunos valores
+#   python entrenar_sb3.py --help                             # lista los escenarios
+#
+# Cada escenario fija algunos argumentos de entrenar_sb3.py; lo que no fija toma el valor por defecto
+# (DEFAULTS en entrenar_sb3.py). Lo que se pase por la terminal pisa al escenario.
+#
+# Para agregar uno: copiar un bloque, cambiarle el nombre y los valores, y escribir en "descripcion"
+# qué pregunta responde. Los nombres de los parámetros son los argumentos del script con guión bajo
+# en vez de guión medio (--dist-inicio-rebano -> dist_inicio_rebano).
+#
+# Ojo con el formato:
+#   - La sangría es de 2 espacios, nunca tabs.
+#   - Los números van sin separadores: 30000, no 30_000.
+#   - true / false para sí o no; null para "nada" (el valor del paper).
+#   - Si la descripción tiene ": " adentro, ponerla entre comillas.
+#   - Para una descripción larga: escribir "descripcion: >-" y el texto en las líneas de abajo,
+#     con más sangría. YAML las une en un solo renglón.
+
+# ---------------------------------------------------------------------
+# Diagnóstico: 1 oveja, pastor detrás, abriendo el ángulo de a poco
+# ---------------------------------------------------------------------
+
+trivial_case:
+  descripcion: >-
+    1 oveja a 40 m de la meta, pastor 5-10 m detrás y alineado.
+    Strömbom 100%, azar 36% (k=4). Si el DQN no llega a ~100% acá, hay un problema de base.
+  n_ovejas: 1
+  dist_inicio_rebano: 40
+  dist_inicio_pastor: 10
+  angulo_pastor: 0
+  cerco: true
+  repetir_accion: 4
+  pasos: 30000
+  eval_cada: 5000
+
+angulo_30:
+  descripcion: Como trivial_case, pero el pastor arranca desviado hasta ±30° de la línea.
+  n_ovejas: 1
+  dist_inicio_rebano: 40
+  dist_inicio_pastor: 10
+  angulo_pastor: 30
+  cerco: true
+  repetir_accion: 4
+  pasos: 30000
+  eval_cada: 5000
+
+angulo_90:
+  descripcion: Como trivial_case, pero el pastor arranca desviado hasta ±90° (puede quedar al costado).
+  n_ovejas: 1
+  dist_inicio_rebano: 40
+  dist_inicio_pastor: 10
+  angulo_pastor: 90
+  cerco: true
+  repetir_accion: 4
+  pasos: 60000
+  eval_cada: 10000
+
+angulo_180:
+  descripcion: >-
+    Como trivial_case, pero el pastor arranca en cualquier dirección.
+    A veces tiene que rodear a la oveja para ponerse detrás.
+  n_ovejas: 1
+  dist_inicio_rebano: 40
+  dist_inicio_pastor: 10
+  angulo_pastor: 180
+  cerco: true
+  repetir_accion: 4
+  pasos: 100000
+  eval_cada: 10000
+
+# ---------------------------------------------------------------------
+# Niveles que ya se probaron (ver resultados/registro.csv)
+# ---------------------------------------------------------------------
+
+rebano_20m:
+  descripcion: >-
+    1 oveja a 20 m de la meta, pastor en cualquier dirección a 5-20 m, con cerco.
+    Con DQN de SB3 y gamma 0.99 quedó en ~30-38%.
+  n_ovejas: 1
+  dist_inicio_rebano: 20
+  dist_inicio_pastor: 20
+  cerco: true
+  repetir_accion: 4
+  pasos: 60000
+  eval_cada: 10000
+
+# ---------------------------------------------------------------------
+# Las tareas "de verdad" (como el paper)
+# ---------------------------------------------------------------------
+
+paper_1_oveja:
+  descripcion: 1 oveja con las posiciones iniciales del paper (~150 m de la meta). Strömbom 100% en ~530 pasos.
+  n_ovejas: 1
+  repetir_accion: 4
+  pasos: 200000
+  eval_cada: 20000
+
+paper_30_ovejas:
+  descripcion: La tarea del paper, 30 ovejas con posiciones iniciales originales. Strömbom 100% en ~450 pasos.
+  n_ovejas: 30
+  repetir_accion: 4
+  max_pasos: 1500
+  pasos: 1000000
+  eval_cada: 50000

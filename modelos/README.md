@@ -23,8 +23,11 @@ n1_potencial_gcm_reb40_pas20_k4_cerco_s0
 | `{recompensa}` | `recompensa` | `esparsa`, `potencial_gcm`, … |
 | `reb{d}` | `dist_inicio_rebano` | metros entre el centro del rebaño y la meta. `reborig` = como en el paper (cuarto superior derecho, ~150 m) |
 | `pas{d}` | `dist_inicio_pastor` | metros máximos entre el pastor y el borde del rebaño. `pasorig` = como en el paper (cuarto inferior izquierdo) |
+| `ang{a}` (opcional) | `angulo_pastor` | el pastor arranca detrás del rebaño respecto de la meta, desviado como mucho ±a grados. `ang0` = perfectamente alineado. Si no aparece, el pastor arranca en cualquier dirección alrededor del rebaño |
 | `k{k}` | `repetir_accion` | 1 = el agente decide en cada paso; 4 = cada acción dura 4 pasos |
 | `cerco` | `cerco=True` | ovejas y pastor no pueden salir de [-30, 180]² |
+| `g{γ}` (opcional) | `--gamma` | solo aparece si γ no es 0.99, por ejemplo `g0.95` |
+| `mp{n}` (opcional) | `--max-pasos` | solo aparece si no es 1000, por ejemplo `mp1500` |
 | `s{s}` | semilla | normalmente 0, 1 y 2 |
 
 El nombre **no** incluye todo. Quedan afuera, por ejemplo, la cantidad de pasos de entrenamiento, `max_pasos`, gamma y los hiperparámetros del DQN. Esos datos están en `resultados/entrenamientos/<nombre>.json`.

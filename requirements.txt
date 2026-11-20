@@ -9,3 +9,4 @@ gymnasium[classic-control]==1.4.0
 stable-baselines3==2.9.2
 tqdm==4.70.1
 rich==15.0.0
+pyyaml==6.0.3

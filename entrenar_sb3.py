@@ -1,8 +1,16 @@
 """
 Entrena el DQN de Stable-Baselines3 en PastoreoEnv y lo evalúa cada tanto sobre mapas fijos.
 
-Ejemplo (nivel más fácil del currículum):
-    python entrenar_sb3.py --n-ovejas 1 --dist-inicio-pastor 20 --pasos 200000 --seed 0
+Uso con un escenario con nombre (definidos en escenarios.yaml):
+    python entrenar_sb3.py trivial_case
+    python entrenar_sb3.py trivial_case --gamma 0.95 --seed 1    # lo que se pase por la terminal pisa al escenario
+
+Uso sin escenario (todo por argumentos):
+    python entrenar_sb3.py --dist-inicio-rebano 40 --dist-inicio-pastor 10 --angulo-pastor 0 --cerco --repetir-accion 4 --pasos 30000
+
+Todos los argumentos y escenarios:  python entrenar_sb3.py --help
+Muestra una barra de progreso en vivo (ver EvalPeriodica). Ctrl+C corta y guarda el modelo igual.
+Cada corrida agrega una fila a resultados/registro.csv (el log de todo lo que se probó).
 
 Cada evaluación usa los mismos 50 mapas (semillas fijas), sin exploración, y mide el % de éxito y los
 pasos promedio de los episodios exitosos. No se compara la recompensa: cada variante tiene otra escala.
@@ -21,6 +29,9 @@ import numpy as np
 import torch
 from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import BaseCallback
+from tqdm import tqdm
+
+import yaml
 
 from pastoreo_env import PastoreoEnv, RECOMPENSAS
 
@@ -38,11 +49,38 @@ HIPERPARAMETROS = dict(
     policy_kwargs=dict(net_arch=[128, 128]),
 )
 
+# Valores por defecto de los argumentos. Un escenario (escenarios.yaml) pisa algunos; la terminal pisa todo.
+DEFAULTS = dict(
+    n_ovejas=1,
+    recompensa="potencial_gcm",
+    dist_inicio_rebano=None,
+    dist_inicio_pastor=None,
+    angulo_pastor=None,
+    repetir_accion=1,
+    cerco=False,
+    max_pasos=1000,
+    pasos=200_000,
+    seed=0,
+    gamma=0.99,
+    eval_cada=20_000,
+    eval_episodios=50,
+    nombre=None,
+    sin_barra=False,
+)
+
+RUTA_ESCENARIOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "escenarios.yaml")
+RUTA_REGISTRO = os.path.join("resultados", "registro.csv")
+COLUMNAS_REGISTRO = [
+    "fecha", "nombre", "escenario", "cambios", "decisiones", "eval_final", "eval_max", "qmax_final",
+    "minutos", "estado",
+]
+
 
 def nombre_por_defecto(args) -> str:
     """
-    n{ovejas}_{recompensa}_reb{dist}_pas{dist}_k{repetir}[_cerco]_s{semilla}
+    n{ovejas}_{recompensa}_reb{dist}_pas{dist}[_ang{grados}]_k{repetir}[_cerco][_g{gamma}][_mp{max_pasos}]_s{semilla}
     Ver modelos/README.md. "orig" = como en el paper (sin el parámetro de currículum).
+    gamma y max_pasos solo aparecen si no son los valores por defecto (0.99 y 1000).
     """
     def dist(x):
         return "orig" if x is None else f"{x:g}"
@@ -52,10 +90,16 @@ def nombre_por_defecto(args) -> str:
         args.recompensa,
         f"reb{dist(args.dist_inicio_rebano)}",
         f"pas{dist(args.dist_inicio_pastor)}",
-        f"k{args.repetir_accion}",
     ]
+    if args.angulo_pastor is not None:
+        partes.append(f"ang{args.angulo_pastor:g}")
+    partes.append(f"k{args.repetir_accion}")
     if args.cerco:
         partes.append("cerco")
+    if args.gamma != DEFAULTS["gamma"]:
+        partes.append(f"g{args.gamma:g}")
+    if args.max_pasos != DEFAULTS["max_pasos"]:
+        partes.append(f"mp{args.max_pasos}")
     partes.append(f"s{args.seed}")
     return "_".join(partes)
 
@@ -76,38 +120,158 @@ def evaluar(model, env_kwargs, episodios=50):
 
 
 class EvalPeriodica(BaseCallback):
-    def __init__(self, env_kwargs, cada, ruta_csv, episodios):
+    """
+    Evalúa cada `cada` decisiones y, si `barra` es True, muestra una barra de progreso en vivo:
+      eps     = epsilon actual (probabilidad de acción al azar)
+      ret     = recompensa promedio de los últimos 20 episodios de entrenamiento
+      exito_t = % de éxito de los últimos 100 episodios de entrenamiento (con exploración)
+      Qmax    = el mayor valor Q que la red ve en el estado actual. Sirve para detectar
+                sobreestimación: con la recompensa esparsa, no debería pasar de 1.
+      eval    = % de éxito de la última evaluación (50 mapas fijos, sin exploración)
+    """
+
+    ACTUALIZAR_BARRA_CADA = 200  # decisiones; actualizar en cada paso haría más lento el entrenamiento
+
+    def __init__(self, env_kwargs, cada, ruta_csv, episodios, barra=True):
         super().__init__()
         self.env_kwargs, self.cada, self.ruta_csv, self.episodios = env_kwargs, cada, ruta_csv, episodios
+        self.barra = barra
+        self.pbar = None
+        self.ultima_eval = float("nan")
+        self.evals = []            # % de éxito de cada evaluación, para el registro
+        self.ultimo_qmax = float("nan")
         self.t0 = time.time()
 
+    def _on_training_start(self):
+        self.t0 = time.time()
+        if self.barra:
+            self.pbar = tqdm(total=self.locals["total_timesteps"], unit="dec", dynamic_ncols=True, smoothing=0.05)
+
     def _on_step(self):
+        if self.pbar is not None and self.num_timesteps % self.ACTUALIZAR_BARRA_CADA == 0:
+            self.pbar.update(self.num_timesteps - self.pbar.n)
+            self.pbar.set_postfix_str(self._resumen_vivo(), refresh=False)
+
         if self.num_timesteps % self.cada == 0:
             exito, pasos = evaluar(self.model, self.env_kwargs, self.episodios)
-            fps = self.num_timesteps / (time.time() - self.t0)
-            print(f"  paso {self.num_timesteps:>8,} | éxito {exito:5.1f}% | pasos {pasos:6.0f} | "
-                  f"eps {self.model.exploration_rate:.2f} | {fps:.0f} pasos/s", flush=True)
+            self.ultima_eval = exito
+            self.evals.append(exito)
+            q_max = self._qmax()
+            linea = (f"  [eval] decisión {self.num_timesteps:>8,} | éxito {exito:5.1f}% | pasos {pasos:6.0f} | "
+                     f"eps {self.model.exploration_rate:.2f} | Qmax {q_max:.2f}")
+            if self.pbar is not None:
+                self.pbar.write(linea)  # escribe arriba de la barra sin romperla
+            else:
+                fps = self.num_timesteps / (time.time() - self.t0)
+                print(f"{linea} | {fps:.0f} dec/s", flush=True)
             with open(self.ruta_csv, "a", newline="") as f:
-                csv.writer(f).writerow([self.num_timesteps, exito, pasos, round(time.time() - self.t0, 1)])
+                csv.writer(f).writerow([self.num_timesteps, exito, pasos, round(time.time() - self.t0, 1),
+                                        round(q_max, 3)])
         return True
+
+    def _qmax(self) -> float:
+        """El mayor valor Q que la red le da al estado actual del entrenamiento."""
+        with torch.no_grad():
+            obs = torch.as_tensor(self.locals["new_obs"], device=self.model.device)
+            self.ultimo_qmax = float(self.model.q_net(obs).max())
+        return self.ultimo_qmax
+
+    def _resumen_vivo(self) -> str:
+        eps_info = list(self.model.ep_info_buffer)[-20:]
+        ret = np.mean([e["r"] for e in eps_info]) if eps_info else float("nan")
+        exitos = self.model.ep_success_buffer
+        exito_t = 100.0 * np.mean(exitos) if len(exitos) else float("nan")
+        return (f"eps={self.model.exploration_rate:.2f} ret={ret:.2f} exito_t={exito_t:.0f}% "
+                f"Qmax={self._qmax():.2f} eval={self.ultima_eval:.0f}%")
+
+    def _on_training_end(self):
+        if self.pbar is not None:
+            self.pbar.update(self.num_timesteps - self.pbar.n)
+            self.pbar.close()
+
+
+def cargar_escenarios(ruta=RUTA_ESCENARIOS) -> dict:
+    """
+    Lee escenarios.yaml y devuelve {nombre: {"descripcion": str, "config": dict}}.
+    Avisa con un error claro si un escenario tiene un parámetro que no existe (por ejemplo, un typo).
+    """
+    with open(ruta, encoding="utf-8") as f:
+        crudo = yaml.safe_load(f) or {}
+    escenarios = {}
+    for nombre, valores in crudo.items():
+        valores = dict(valores or {})
+        descripcion = str(valores.pop("descripcion", ""))
+        desconocidos = set(valores) - set(DEFAULTS)
+        if desconocidos:
+            raise ValueError(
+                f"escenarios.yaml, escenario '{nombre}': parámetro(s) desconocido(s) {sorted(desconocidos)}. "
+                f"Los válidos son: {sorted(DEFAULTS)}"
+            )
+        escenarios[nombre] = {"descripcion": descripcion, "config": valores}
+    return escenarios
+
+
+def leer_argumentos():
+    """
+    Combina, en este orden (cada uno pisa al anterior): DEFAULTS, el escenario elegido y lo que se
+    pasó por la terminal. Devuelve (args, nombre del escenario o None, dict de cambios respecto del escenario).
+    """
+    ESCENARIOS = cargar_escenarios()
+    lista = "\n".join(f"  {n:<16} {e['descripcion']}" for n, e in ESCENARIOS.items())
+    p = argparse.ArgumentParser(
+        description="Entrena el DQN de SB3 en el entorno de pastoreo.",
+        epilog=f"escenarios disponibles (se editan en escenarios.yaml):\n{lista}",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    S = argparse.SUPPRESS  # así solo aparecen en args los argumentos que se pasaron de verdad
+    d = DEFAULTS
+    p.add_argument("escenario", nargs="?", default=None, choices=list(ESCENARIOS),
+                   help="escenario con nombre de escenarios.yaml (opcional)")
+    p.add_argument("--n-ovejas", type=int, default=S, help=f"cantidad de ovejas (default: {d['n_ovejas']})")
+    p.add_argument("--recompensa", choices=list(RECOMPENSAS), default=S,
+                   help=f"función de recompensa (default: {d['recompensa']})")
+    p.add_argument("--dist-inicio-rebano", type=float, default=S,
+                   help="metros entre el centro del rebaño y la meta al arrancar (default: como el paper, ~150 m)")
+    p.add_argument("--dist-inicio-pastor", type=float, default=S,
+                   help="el pastor arranca entre 5 m y esta distancia del borde del rebaño (default: como el paper)")
+    p.add_argument("--angulo-pastor", type=float, default=S,
+                   help="grados de desvío del pastor respecto de 'detrás del rebaño'; 0 = alineado "
+                        "(requiere --dist-inicio-pastor; default: cualquier dirección)")
+    p.add_argument("--repetir-accion", type=int, default=S,
+                   help=f"pasos de simulación por decisión (default: {d['repetir_accion']})")
+    p.add_argument("--cerco", action="store_true", default=S, help="mundo con bordes en [-30, 180]")
+    p.add_argument("--max-pasos", type=int, default=S,
+                   help=f"pasos de simulación por episodio (default: {d['max_pasos']})")
+    p.add_argument("--pasos", type=int, default=S, help=f"decisiones de entrenamiento en total (default: {d['pasos']})")
+    p.add_argument("--seed", type=int, default=S, help=f"semilla (default: {d['seed']})")
+    p.add_argument("--gamma", type=float, default=S, help=f"descuento, por decisión (default: {d['gamma']})")
+    p.add_argument("--eval-cada", type=int, default=S, help=f"evaluar cada N decisiones (default: {d['eval_cada']})")
+    p.add_argument("--eval-episodios", type=int, default=S, help=f"mapas por evaluación (default: {d['eval_episodios']})")
+    p.add_argument("--nombre", default=S, help="nombre de la corrida (default: se arma con los argumentos)")
+    p.add_argument("--sin-barra", action="store_true", default=S,
+                   help="sin barra de progreso, solo una línea por evaluación (para correr varias en paralelo)")
+
+    terminal = vars(p.parse_args())
+    escenario = terminal.pop("escenario")
+    del_escenario = ESCENARIOS[escenario]["config"] if escenario else {}
+    config = {**DEFAULTS, **del_escenario, **terminal}
+    # "cambios": lo que difiere del escenario (o de DEFAULTS si no hay escenario), para el registro
+    base = {**DEFAULTS, **del_escenario}
+    cambios = {k: v for k, v in terminal.items() if base.get(k) != v and k not in ("sin_barra",)}
+    return argparse.Namespace(**config), escenario, cambios
+
+
+def agregar_al_registro(fila: dict):
+    nuevo = not os.path.exists(RUTA_REGISTRO)
+    with open(RUTA_REGISTRO, "a", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=COLUMNAS_REGISTRO)
+        if nuevo:
+            w.writeheader()
+        w.writerow(fila)
 
 
 def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--n-ovejas", type=int, default=1)
-    p.add_argument("--recompensa", default="potencial_gcm", choices=list(RECOMPENSAS))
-    p.add_argument("--dist-inicio-pastor", type=float, default=None)
-    p.add_argument("--dist-inicio-rebano", type=float, default=None)
-    p.add_argument("--repetir-accion", type=int, default=1)
-    p.add_argument("--cerco", action="store_true")
-    p.add_argument("--max-pasos", type=int, default=1000)
-    p.add_argument("--pasos", type=int, default=200_000)
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--gamma", type=float, default=0.99)
-    p.add_argument("--eval-cada", type=int, default=20_000)
-    p.add_argument("--eval-episodios", type=int, default=50)
-    p.add_argument("--nombre", default=None)
-    args = p.parse_args()
+    args, escenario, cambios = leer_argumentos()
 
     torch.set_num_threads(1)  # redes chicas: un hilo es más rápido (ver PLAN_DQN.md, sección 6)
 
@@ -120,19 +284,25 @@ def main():
         dist_inicio_pastor=args.dist_inicio_pastor,
         dist_inicio_rebano=args.dist_inicio_rebano,
         repetir_accion=args.repetir_accion,
+        angulo_pastor=args.angulo_pastor,
     )
     nombre = args.nombre or nombre_por_defecto(args)
     carpeta = os.path.join("resultados", "entrenamientos")
     os.makedirs(carpeta, exist_ok=True)
     ruta_csv = os.path.join(carpeta, f"{nombre}.csv")
+    if os.path.exists(ruta_csv):
+        print(f"AVISO: ya existía una corrida '{nombre}'; se sobrescriben su curva y su modelo.")
     with open(ruta_csv, "w", newline="") as f:
-        csv.writer(f).writerow(["paso", "exito_pct", "pasos_media", "segundos"])
+        csv.writer(f).writerow(["paso", "exito_pct", "pasos_media", "segundos", "qmax"])
 
     # Configuración completa de la corrida, para poder reproducirla (el nombre no lo dice todo)
+    fecha = datetime.now().isoformat(timespec="seconds")
     with open(os.path.join(carpeta, f"{nombre}.json"), "w", encoding="utf-8") as f:
         json.dump({
             "nombre": nombre,
-            "fecha": datetime.now().isoformat(timespec="seconds"),
+            "fecha": fecha,
+            "escenario": escenario,
+            "cambios_sobre_escenario": cambios,
             "argumentos": vars(args),
             "entorno": env_kwargs,
             "hiperparametros_dqn": HIPERPARAMETROS,
@@ -147,11 +317,38 @@ def main():
         **HIPERPARAMETROS,
     )
 
-    print(f"[{nombre}] entrenando {args.pasos:,} pasos ...", flush=True)
-    model.learn(args.pasos, callback=EvalPeriodica(env_kwargs, args.eval_cada, ruta_csv, args.eval_episodios))
+    desde = f"escenario '{escenario}'" + (f" con cambios {cambios}" if cambios else "") if escenario else "argumentos"
+    print(f"[{nombre}] ({desde}) entrenando {args.pasos:,} decisiones ...", flush=True)
+    t0 = time.time()
+    callback = EvalPeriodica(env_kwargs, args.eval_cada, ruta_csv, args.eval_episodios, barra=not args.sin_barra)
+    interrumpido = False
+    try:
+        model.learn(args.pasos, callback=callback)
+    except KeyboardInterrupt:
+        # Ctrl+C: se guarda igual lo que se entrenó hasta ahora
+        interrumpido = True
+        if callback.pbar is not None:
+            callback.pbar.close()
+        print(f"\n[{nombre}] interrumpido en la decisión {model.num_timesteps:,}. Guardando el modelo...")
+
     os.makedirs("modelos", exist_ok=True)
     model.save(os.path.join("modelos", nombre))
-    print(f"[{nombre}] listo. Curva en {ruta_csv}, modelo en modelos/{nombre}.zip")
+    estado = "interrumpido" if interrumpido else "listo"
+
+    agregar_al_registro({
+        "fecha": fecha,
+        "nombre": nombre,
+        "escenario": escenario or "",
+        "cambios": " ".join(f"{k}={v}" for k, v in cambios.items()),
+        "decisiones": model.num_timesteps,
+        "eval_final": callback.evals[-1] if callback.evals else "",
+        "eval_max": max(callback.evals) if callback.evals else "",
+        "qmax_final": round(callback.ultimo_qmax, 3),
+        "minutos": round((time.time() - t0) / 60, 1),
+        "estado": estado,
+    })
+    print(f"[{nombre}] {estado}. Curva en {ruta_csv}, modelo en modelos/{nombre}.zip, "
+          f"fila agregada a {RUTA_REGISTRO}")
 
 
 if __name__ == "__main__":

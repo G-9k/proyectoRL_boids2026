@@ -2,6 +2,22 @@
 
 Números de los experimentos. Todo esto va a git: son archivos chicos y es lo que se compara entre corridas.
 
+## registro.csv: el log de todo lo que se probó
+
+Cada corrida de [entrenar_sb3.py](../entrenar_sb3.py) agrega una fila al terminar (también si se corta con Ctrl+C). Es el primer lugar donde mirar para saber qué se probó y cómo dio.
+
+| Columna | Qué es |
+|---|---|
+| `fecha`, `nombre` | cuándo y cuál corrida (el nombre lleva a la curva, la configuración y el modelo) |
+| `escenario` | el escenario de [escenarios.yaml](../escenarios.yaml) que se usó; vacío si se pasó todo por argumentos |
+| `cambios` | lo que se cambió por la terminal respecto del escenario, por ejemplo `gamma=0.95 seed=1` |
+| `decisiones` | cuántas decisiones se entrenó |
+| `eval_final`, `eval_max` | % de éxito en la última evaluación y en la mejor |
+| `qmax_final` | el mayor valor Q al final. Con la recompensa `esparsa`, más de 1 indica sobreestimación |
+| `minutos`, `estado` | duración, y `listo` o `interrumpido` |
+
+Las corridas anteriores al registro (las del 19/11 con fecha "reconstruido") se cargaron a partir de sus archivos y no tienen `qmax_final`.
+
 ## strombom_baseline.csv
 
 La línea de base: el pastor de Strömbom dentro de `PastoreoEnv`. Lo genera [medir_strombom.py](../medir_strombom.py) con 100 episodios por fila, sobre los mapas de las semillas 10000 a 10099.
@@ -26,6 +42,7 @@ Una corrida de [entrenar_sb3.py](../entrenar_sb3.py) deja dos archivos con el mi
 | `exito_pct` | % de éxito en 50 mapas fijos (semillas 20000 a 20049), sin exploración |
 | `pasos_media` | pasos de simulación promedio en los episodios exitosos (vacío si no hubo ninguno) |
 | `segundos` | tiempo transcurrido desde que empezó el entrenamiento |
+| `qmax` | el mayor valor Q que la red le da al estado de entrenamiento en ese momento (solo en corridas nuevas) |
 
 **`<nombre>.json`: la configuración completa.** Tiene los argumentos del script, los parámetros del entorno y los hiperparámetros del DQN. Sirve para reproducir la corrida o para cargar el modelo con el mismo entorno.
 

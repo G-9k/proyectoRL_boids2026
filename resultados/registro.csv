@@ -1,0 +1,28 @@
+fecha,nombre,escenario,cambios,decisiones,eval_final,eval_max,qmax_final,minutos,estado
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reborig_pas20_k1_s0,,(sin escenario),200000,0.0,0.0,,5.9,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reborig_pas20_k1_s1,,(sin escenario),200000,0.0,0.0,,6.0,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reborig_pas20_k1_s2,,(sin escenario),200000,0.0,0.0,,5.9,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb40_pas20_k1_s0,,(sin escenario),200000,6.0,26.0,,5.6,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb40_pas20_k1_s1,,(sin escenario),200000,16.0,24.0,,5.6,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb40_pas20_k1_s2,,(sin escenario),200000,16.0,26.0,,5.5,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb40_pas20_k4_s0,,(sin escenario),100000,14.0,20.0,,4.4,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb40_pas20_k4_s1,,(sin escenario),100000,6.0,18.0,,4.4,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb40_pas20_k4_s2,,(sin escenario),100000,12.0,30.0,,4.3,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reborig_pas20_k4_s0,,(sin escenario),100000,0.0,0.0,,4.5,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reborig_pas20_k4_s1,,(sin escenario),100000,0.0,0.0,,4.5,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reborig_pas20_k4_s2,,(sin escenario),100000,0.0,0.0,,4.5,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb20_pas20_k4_s0,,(sin escenario),60000,8.0,34.0,,2.1,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb20_pas20_k4_s1,,(sin escenario),60000,6.0,40.0,,2.1,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb20_pas20_k4_s2,,(sin escenario),60000,12.0,46.0,,2.1,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb20_pas20_k4_cerco_s0,rebano_20m,,60000,38.0,44.0,,2.5,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb20_pas20_k4_cerco_s1,rebano_20m,,60000,30.0,44.0,,2.6,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb20_pas20_k4_cerco_s2,rebano_20m,,60000,38.0,64.0,,2.4,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb40_pas20_k4_cerco_s0,,(sin escenario),60000,18.0,26.0,,2.7,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb40_pas20_k4_cerco_s1,,(sin escenario),60000,24.0,24.0,,2.8,listo
+2026-11-19 (reconstruido después de la corrida),n1_potencial_gcm_reb40_pas20_k4_cerco_s2,,(sin escenario),60000,32.0,34.0,,2.6,listo
+2026-11-19T21:56:29,n1_esparsa_reb40_pas10_ang0_k4_cerco_s0,trivial_case,recompensa=esparsa,30000,34.0,38.0,,1.9,listo
+2026-11-19T21:56:29,n1_esparsa_reb40_pas10_ang0_k4_cerco_s1,trivial_case,recompensa=esparsa,30000,34.0,92.0,,1.7,listo
+2026-11-19T21:56:29,n1_esparsa_reb40_pas10_ang0_k4_cerco_s2,trivial_case,recompensa=esparsa,30000,26.0,56.0,,1.8,listo
+2026-11-19T21:56:29,n1_potencial_gcm_reb40_pas10_ang0_k4_cerco_s0,trivial_case,,30000,34.0,40.0,,1.8,listo
+2026-11-19T21:56:29,n1_potencial_gcm_reb40_pas10_ang0_k4_cerco_s1,trivial_case,,30000,32.0,92.0,,1.7,listo
+2026-11-19T21:56:29,n1_potencial_gcm_reb40_pas10_ang0_k4_cerco_s2,trivial_case,,30000,30.0,36.0,,1.8,listo

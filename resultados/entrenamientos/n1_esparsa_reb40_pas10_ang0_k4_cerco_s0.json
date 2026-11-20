@@ -1,0 +1,47 @@
+{
+  "nombre": "n1_esparsa_reb40_pas10_ang0_k4_cerco_s0",
+  "fecha": "2026-11-19T21:56:29",
+  "argumentos": {
+    "n_ovejas": 1,
+    "recompensa": "esparsa",
+    "dist_inicio_pastor": 10.0,
+    "dist_inicio_rebano": 40.0,
+    "angulo_pastor": 0.0,
+    "repetir_accion": 4,
+    "cerco": true,
+    "max_pasos": 1000,
+    "pasos": 30000,
+    "seed": 0,
+    "gamma": 0.99,
+    "eval_cada": 5000,
+    "eval_episodios": 50,
+    "nombre": null
+  },
+  "entorno": {
+    "n_ovejas": 1,
+    "recompensa": "esparsa",
+    "gamma": 0.99,
+    "max_pasos": 1000,
+    "cerco": true,
+    "dist_inicio_pastor": 10.0,
+    "dist_inicio_rebano": 40.0,
+    "repetir_accion": 4,
+    "angulo_pastor": 0.0
+  },
+  "hiperparametros_dqn": {
+    "learning_rate": 0.0005,
+    "buffer_size": 100000,
+    "learning_starts": 5000,
+    "batch_size": 128,
+    "train_freq": 4,
+    "target_update_interval": 1000,
+    "exploration_fraction": 0.3,
+    "exploration_final_eps": 0.05,
+    "policy_kwargs": {
+      "net_arch": [
+        128,
+        128
+      ]
+    }
+  }
+}
