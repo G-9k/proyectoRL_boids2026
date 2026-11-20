@@ -55,18 +55,29 @@ class ManualStrombomEnv:
         8: np.array([1.0, -1.0]) / np.sqrt(2.0),        # Sudeste (SE)
     }
 
-    def __init__(self):
-        self.rng = np.random.default_rng()
+    def __init__(self, n_sheep=N, target_radius=TARGET_RADIUS, bounds=None, seed=None):
+        r"""
+        n_sheep: cantidad de ovejas (por defecto N = 30, como en el paper).
+        target_radius: el episodio se completa cuando el GCM está a menos de esto de la meta.
+        bounds: None = mundo sin bordes (original). Una tupla (min, max) = cerco cuadrado:
+                ovejas y pastor no pueden salir de [min, max] x [min, max].
+        seed: semilla del generador aleatorio (None = no reproducible).
+        """
+        self.N = int(n_sheep)
+        self.f_N = r_a * (self.N ** (2.0 / 3.0))
+        self.target_radius = float(target_radius)
+        self.bounds = bounds
+        self.rng = np.random.default_rng(seed)
         self.keys_pressed = set()
         self.reset()
 
     def reset(self):
         # Sección 4.1: N agentes posicionados aleatoriamente en el cuarto superior derecho
         # de un cuadrado L x L ([L/2, L] x [L/2, L], es decir, [75, 150] x [75, 150])
-        self.A = self.rng.uniform(L / 2.0, L, size=(N, 2))
+        self.A = self.rng.uniform(L / 2.0, L, size=(self.N, 2))
 
         # Direcciones iniciales unitarias \hat{H}_i
-        angles = self.rng.uniform(0, 2 * np.pi, size=N)
+        angles = self.rng.uniform(0, 2 * np.pi, size=self.N)
         self.H = np.column_stack((np.cos(angles), np.sin(angles)))
 
         # Sección 4.1: Pastor liberado en el cuarto inferior izquierdo ([0, L/2] x [0, L/2])
@@ -93,8 +104,16 @@ class ManualStrombomEnv:
         self.d_max = float(dists_to_gcm[self.far_sheep_idx])
         self.dist_goal = float(np.linalg.norm(self.gcm - TARGET))
         self.min_dist_sheep = float(np.min(np.linalg.norm(self.A - self.S, axis=1)))
-        if self.dist_goal <= TARGET_RADIUS:
+        if self.dist_goal <= self.target_radius:
             self.task_completed = True
+
+    def _apply_bounds(self):
+        r"""Cerco opcional: mantiene ovejas y pastor dentro de [min, max] x [min, max]."""
+        if self.bounds is None:
+            return
+        lo, hi = self.bounds
+        np.clip(self.A, lo, hi, out=self.A)
+        self.S = np.clip(self.S, lo, hi)
 
     def get_dqn_state(self):
         r"""
@@ -104,9 +123,9 @@ class ManualStrombomEnv:
         A_far = self.A[self.far_sheep_idx]
         return np.concatenate([
             (self.gcm - self.S) / L,
-            (A_far - self.gcm) / f_N,
+            (A_far - self.gcm) / self.f_N,
             (TARGET - self.gcm) / L,
-            [self.d_max / f_N, self.min_dist_sheep / (3.0 * r_a)]
+            [self.d_max / self.f_N, self.min_dist_sheep / (3.0 * r_a)]
         ])
 
     def step_shepherd_from_keys(self):
@@ -160,19 +179,21 @@ class ManualStrombomEnv:
 
         # 4. Atracción al Centro de Masa Local (LCM_i) de sus n vecinos más cercanos: \hat{C}_i
         # Activa únicamente cuando la oveja está dentro de r_s del pastor
-        nearest_idx = np.argsort(dist_matrix, axis=1)[:, :n_topo]   # (N, n_topo)
-        LCM = np.mean(self.A[nearest_idx], axis=1)                  # (N, 2)
-
+        # Con N <= n_topo se usan las N-1 restantes (sin contarse a sí misma); con N = 1 no hay atracción.
         C_i = np.zeros_like(self.A)
-        C_i[threatened] = self.normalize(LCM[threatened] - self.A[threatened])
+        k_neighbors = min(n_topo, self.N - 1)
+        if k_neighbors > 0:
+            nearest_idx = np.argsort(dist_matrix, axis=1)[:, :k_neighbors]  # (N, k)
+            LCM = np.mean(self.A[nearest_idx], axis=1)                       # (N, 2)
+            C_i[threatened] = self.normalize(LCM[threatened] - self.A[threatened])
 
         # 5. Ruido angular unitario \hat{\varepsilon}_i
-        angles_eps = self.rng.uniform(0, 2 * np.pi, size=N)
+        angles_eps = self.rng.uniform(0, 2 * np.pi, size=self.N)
         eps_i = np.column_stack((np.cos(angles_eps), np.sin(angles_eps)))
 
         # 6. Regla de activación del movimiento (Pastoreo vs Interacción):
         active_interaction = threatened | has_ra_neighbor
-        random_jiggle = (~active_interaction) & (self.rng.random(N) < p_grazing_move)
+        random_jiggle = (~active_interaction) & (self.rng.random(self.N) < p_grazing_move)
         moving_mask = active_interaction | random_jiggle
 
         # 7. Nueva dirección \hat{H}_i' (Ecuación 4.2)
@@ -201,6 +222,7 @@ class ManualStrombomEnv:
             self.step_shepherd_action(action_idx)
 
         self.step_sheep()
+        self._apply_bounds()
         self.update_metrics()
 
 
@@ -228,7 +250,7 @@ def main():
     ax.plot([0, L, L, 0, 0], [0, 0, L, L, 0], color='#7f8c8d', linestyle='--', linewidth=1.0, alpha=0.6, label=f'Campo inicial ({int(L)}x{int(L)} m)')
 
     # Meta en el origen (0, 0)
-    target_circle = Circle(TARGET, TARGET_RADIUS, color='#2ecc71', alpha=0.35, label='Meta (Origen 0,0)')
+    target_circle = Circle(TARGET, sim.target_radius, color='#2ecc71', alpha=0.35, label='Meta (Origen 0,0)')
     ax.add_patch(target_circle)
     ax.plot(TARGET[0], TARGET[1], 'g+', markersize=10, markeredgewidth=2)
 
@@ -241,7 +263,7 @@ def main():
     ax.add_patch(stop_circle)
 
     # Umbral de cohesión f(N) alrededor del GCM
-    fn_circle = Circle(sim.gcm, f_N, color='#3498db', fill=False, linestyle='--', linewidth=1.2, alpha=0.7, label=f'Cohesión $f(N)={f_N:.1f}$ m')
+    fn_circle = Circle(sim.gcm, sim.f_N, color='#3498db', fill=False, linestyle='--', linewidth=1.2, alpha=0.7, label=f'Cohesión $f(N)={sim.f_N:.1f}$ m')
     ax.add_patch(fn_circle)
 
     # Gráficos dinámicos
@@ -296,13 +318,13 @@ def main():
         far_pos = sim.A[sim.far_sheep_idx]
         far_sheep_plot.set_data([far_pos[0]], [far_pos[1]])
 
-        cohesive_str = "SÍ (Compacto)" if sim.d_max <= f_N else "NO (Disperso)"
+        cohesive_str = "SÍ (Compacto)" if sim.d_max <= sim.f_N else "NO (Disperso)"
         goal_str = "¡COMPLETADO!" if sim.task_completed else f"{sim.dist_goal:5.1f} m"
 
         status_text.set_text(
             f"Control Pastor : MANUAL (Flechas)\n"
             f"Rebaño compacto: {cohesive_str}\n"
-            f"Dispersión máx : {sim.d_max:5.1f} / f(N)={f_N:.1f} m\n"
+            f"Dispersión máx : {sim.d_max:5.1f} / f(N)={sim.f_N:.1f} m\n"
             f"Dist. GCM Meta : {goal_str}\n"
             f"Dist. oveja mín: {sim.min_dist_sheep:5.1f} m"
         )

@@ -1,0 +1,17 @@
+politica,n_ovejas,cerco,episodios,exito_pct,pasos_media,pasos_p50,pasos_p95,pasos_max,segundos
+strombom_9_acciones,1,False,100,100.0,549.68,543.0,666.4499999999999,840.0,26.7
+strombom_9_acciones,1,True,100,77.0,457.5584415584416,408.0,492.8000000000002,3935.0,48.6
+strombom_9_acciones,3,False,100,100.0,480.17,472.0,573.25,742.0,27.5
+strombom_9_acciones,3,True,100,95.0,459.30526315789473,461.0,527.5,562.0,34.5
+strombom_9_acciones,10,False,100,100.0,463.12,451.5,593.4,770.0,26.8
+strombom_9_acciones,10,True,100,100.0,449.75,441.0,545.1,570.0,26.9
+strombom_9_acciones,30,False,100,100.0,461.42,458.5,554.35,632.0,32.1
+strombom_9_acciones,30,True,100,100.0,455.44,458.5,530.15,578.0,32.8
+strombom_continuo,1,False,100,100.0,525.45,533.5,668.9,794.0,25.1
+strombom_continuo,1,True,100,74.0,493.31081081081084,403.5,512.9499999999999,4352.0,51.2
+strombom_continuo,3,False,100,100.0,480.31,464.5,635.1,919.0,25.4
+strombom_continuo,3,True,100,100.0,457.69,452.5,547.0,570.0,25.7
+strombom_continuo,10,False,100,100.0,448.41,431.5,568.9,637.0,24.6
+strombom_continuo,10,True,100,100.0,444.29,434.0,537.0,664.0,25.1
+strombom_continuo,30,False,100,100.0,451.54,447.5,527.35,598.0,30.7
+strombom_continuo,30,True,100,100.0,452.2,450.5,530.5,624.0,31.2

@@ -1,0 +1,45 @@
+{
+  "nombre": "n1_potencial_gcm_reb20_pas20_k4_s2",
+  "fecha": "2026-11-19 (reconstruido después de la corrida)",
+  "argumentos": {
+    "n_ovejas": 1,
+    "recompensa": "potencial_gcm",
+    "dist_inicio_pastor": 20.0,
+    "dist_inicio_rebano": 20.0,
+    "repetir_accion": 4,
+    "cerco": false,
+    "max_pasos": 1000,
+    "pasos": 60000,
+    "seed": 2,
+    "gamma": 0.99,
+    "eval_cada": 10000,
+    "eval_episodios": 50,
+    "nombre": null
+  },
+  "entorno": {
+    "n_ovejas": 1,
+    "recompensa": "potencial_gcm",
+    "gamma": 0.99,
+    "max_pasos": 1000,
+    "cerco": false,
+    "dist_inicio_pastor": 20.0,
+    "dist_inicio_rebano": 20.0,
+    "repetir_accion": 4
+  },
+  "hiperparametros_dqn": {
+    "learning_rate": 0.0005,
+    "buffer_size": 100000,
+    "learning_starts": 5000,
+    "batch_size": 128,
+    "train_freq": 4,
+    "target_update_interval": 1000,
+    "exploration_fraction": 0.3,
+    "exploration_final_eps": 0.05,
+    "policy_kwargs": {
+      "net_arch": [
+        128,
+        128
+      ]
+    }
+  }
+}
