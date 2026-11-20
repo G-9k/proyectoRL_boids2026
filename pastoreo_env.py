@@ -227,12 +227,7 @@ class PastoreoEnv(gym.Env):
         antes = self._medidas
 
         for _ in range(self.repetir_accion):
-            mover_pastor()
-            self.sim.step_sheep()
-            self.sim._apply_bounds()
-            self.sim.update_metrics()
-            self.pasos += 1
-            if self.sim.task_completed or self.pasos >= self.max_pasos:
+            if self.paso_simulacion(mover_pastor):
                 break
 
         despues = medir(self.sim)
@@ -242,6 +237,19 @@ class PastoreoEnv(gym.Env):
 
         self._medidas = despues
         return self._obs(), reward, terminated, truncated, self._info(exito=terminated)
+
+    def paso_simulacion(self, mover_pastor) -> bool:
+        """
+        Un solo paso de simulación: se mueve el pastor, después las ovejas. Devuelve True si el
+        episodio terminó (éxito o max_pasos). No calcula recompensa: eso lo hace _avanzar por decisión.
+        Lo usa también simulador.py para avanzar paso a paso.
+        """
+        mover_pastor()
+        self.sim.step_sheep()
+        self.sim._apply_bounds()
+        self.sim.update_metrics()
+        self.pasos += 1
+        return bool(self.sim.task_completed) or self.pasos >= self.max_pasos
 
     # -----------------------------------------------------------------
     def _ubicar_rebano(self):

@@ -246,6 +246,21 @@ def cargar_escenarios(ruta=RUTA_ESCENARIOS) -> dict:
     return escenarios
 
 
+def kwargs_entorno(params: dict) -> dict:
+    """Parámetros de PastoreoEnv a partir de los argumentos del script (o de DEFAULTS + un escenario)."""
+    return dict(
+        n_ovejas=params["n_ovejas"],
+        recompensa=params["recompensa"],
+        gamma=params["gamma"],  # el mismo gamma que el agente, para que el shaping sea correcto
+        max_pasos=params["max_pasos"],
+        cerco=params["cerco"],
+        dist_inicio_pastor=params["dist_inicio_pastor"],
+        dist_inicio_rebano=params["dist_inicio_rebano"],
+        repetir_accion=params["repetir_accion"],
+        angulo_pastor=params["angulo_pastor"],
+    )
+
+
 def leer_argumentos():
     """
     Combina, en este orden (cada uno pisa al anterior): DEFAULTS, el escenario elegido y lo que se
@@ -314,17 +329,7 @@ def main():
 
     torch.set_num_threads(1)  # redes chicas: un hilo es más rápido (ver PLAN_DQN.md, sección 6)
 
-    env_kwargs = dict(
-        n_ovejas=args.n_ovejas,
-        recompensa=args.recompensa,
-        gamma=args.gamma,  # el mismo gamma que el agente, para que el shaping sea correcto
-        max_pasos=args.max_pasos,
-        cerco=args.cerco,
-        dist_inicio_pastor=args.dist_inicio_pastor,
-        dist_inicio_rebano=args.dist_inicio_rebano,
-        repetir_accion=args.repetir_accion,
-        angulo_pastor=args.angulo_pastor,
-    )
+    env_kwargs = kwargs_entorno(vars(args))
     nombre = args.nombre or nombre_por_defecto(args)
     carpeta = os.path.join("resultados", "entrenamientos")
     os.makedirs(carpeta, exist_ok=True)
