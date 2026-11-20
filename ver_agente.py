@@ -45,6 +45,8 @@ def cargar_corrida(nombre: str, final: bool):
     if not os.path.exists(ruta_json):
         raise SystemExit(f"No existe {ruta_json}. ¿Está bien escrito el nombre de la corrida?")
     config = json.load(open(ruta_json, encoding="utf-8"))
+    # Las corridas anteriores al 20/11/2026 no guardaban "observacion": se entrenaron con la original
+    config["entorno"].setdefault("observacion", "original")
 
     ruta_mejor = os.path.join("modelos", f"{nombre}_mejor.zip")
     ruta_final = os.path.join("modelos", f"{nombre}.zip")

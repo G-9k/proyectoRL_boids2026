@@ -50,7 +50,21 @@ Esto se llama **bootstrapping**: el objetivo se arma con la propia estimación d
 
 ### 2.2 La red neuronal
 
-En vez de una tabla con un $Q$ por estado (imposible: las posiciones son continuas), una red neuronal recibe el estado (8 números) y devuelve 9 valores, uno por acción. La nuestra es un MLP de dos capas de 128. Se entrena por descenso de gradiente para acercar su salida al objetivo $y$. SB3 usa la pérdida de Huber, que es cuadrática para errores chicos y lineal para errores grandes, y recorta el gradiente para que un error grande no rompa la red de un saque.
+En vez de una tabla con un $Q$ por estado (imposible: las posiciones son continuas), una red neuronal recibe el estado (8 números) y devuelve 9 valores, uno por acción. Se entrena por descenso de gradiente (optimizador Adam) para acercar su salida al objetivo $y$. SB3 usa la pérdida de Huber, que es cuadrática para errores chicos y lineal para errores grandes, y recorta el gradiente para que un error grande no rompa la red de un saque.
+
+La nuestra es un MLP (perceptrón multicapa) con dos capas ocultas de 128 neuronas y ReLU:
+
+```
+entrada (8) → Linear 8→128 → ReLU → Linear 128→128 → ReLU → Linear 128→9 → Q de cada acción (9)
+```
+
+- Son 18.825 parámetros: 8·128+128, más 128·128+128, más 128·9+9.
+- La red target es una copia con la misma forma.
+- La última capa no tiene activación porque $Q$ puede ser cualquier número real. Una sigmoide la encerraría en (0, 1).
+- El valor por defecto de SB3 para DQN es `[64, 64]`. Usamos `[128, 128]`, que se cambia con `--red`, por ejemplo `--red 256,256`.
+- La activación y el optimizador también se pueden cambiar, con `policy_kwargs` (`activation_fn`, `optimizer_class`).
+
+**Escala de las entradas.** A una red le cuesta más aprender si una entrada es mucho más grande que las demás, porque esa entrada domina las primeras sumas y su gradiente. Hasta el 20/11 la distancia a la oveja más cercana se dividía por 6 m y valía 13–25 con el pastor lejos, mientras las otras 7 entradas rondaban entre −1 y 1. Ahora se divide por $r_s$ = 65 m: vale 1 justo donde la oveja empieza a sentir al pastor. Ver `OBSERVACIONES` en [pastoreo_env.py](pastoreo_env.py).
 
 **Generalización: virtud y problema.** La red comparte parámetros entre estados. Aprender sobre un estado cambia los valores de estados parecidos. Eso permite generalizar a posiciones que nunca vio, pero también permite que entrenar en unos estados **desarme lo que sabía de otros**. Esa es la raíz del olvido catastrófico (sección 6).
 
@@ -316,7 +330,7 @@ Que los datos viejos estén en el buffer no basta. A medida que entra experienci
 | Construir sobre [Pastoreo_flechitas.py](Pastoreo_flechitas.py) (física de Strömbom, meta en el origen) | Reusar el entorno de Javier | Es la pregunta del plan (DQN contra Strömbom), tiene la heurística ya hecha, corre ~2,5 veces más rápido. El de Javier resuelve otra tarea (tranquera, 3 grupos) e itera red y recompensa a la vez |
 | API de Gymnasium | Un loop a mano | Permite usar SB3, un DQN probado: si no aprende, el problema es el entorno o la recompensa, no un bug del algoritmo. `check_env` valida la interfaz |
 | 9 acciones discretas (quieto + 8 direcciones) | Acción continua | DQN necesita acciones discretas. Medimos que Strömbom discretizado a esas 9 rinde igual (100%), así que no perdemos nada |
-| Observación de 8 números (posiciones relativas normalizadas) | Posiciones de cada oveja | Tiene el mismo tamaño con 1 o 30 ovejas y no depende del orden de las ovejas. Tiene lo necesario: dónde está el rebaño respecto del pastor, la meta respecto del rebaño, la oveja más lejana y la dispersión |
+| Observación de 8 números (posiciones relativas normalizadas) | Posiciones de cada oveja | Tiene el mismo tamaño con 1 o 30 ovejas y no depende del orden de las ovejas. Tiene lo necesario: dónde está el rebaño respecto del pastor, la meta respecto del rebaño, la oveja más lejana y la dispersión. Todas las entradas en escalas parecidas (sección 2.2): la distancia a la oveja más cercana se divide por $r_s$ desde el 20/11 |
 | `repetir_accion` (k = 4) | Decidir en cada paso | Cada acción dura 4 pasos de simulación (*frame skip*). Una decisión mueve algo de verdad, el horizonte en decisiones es 4 veces más corto (γ "ve" más lejos en metros) y entrena más rápido |
 | Currículum por parámetros (distancia del rebaño, del pastor, ángulo) | Siempre la tarea completa | Desde la distancia del paper no hay señal (azar 0%). Empezamos donde sí se puede aprender y abrimos de a poco |
 | `cerco` opcional | Mundo sin bordes siempre | Sin bordes, al principio el pastor aprendía a irse caminando para siempre. Con cerco y 1 oveja aparece la trampa de la esquina (incluso Strömbom cae al 74–77%) |

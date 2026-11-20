@@ -9,6 +9,7 @@ Uso sin escenario (todo por argumentos):
     python entrenar_sb3.py --dist-inicio-rebano 40 --dist-inicio-pastor 10 --angulo-pastor 0 --cerco --repetir-accion 4 --pasos 30000
 
 Todos los argumentos y escenarios:  python entrenar_sb3.py --help
+La red y la observación también se eligen por la terminal:  --red 256,256  --observacion original
 Muestra una barra de progreso en vivo (ver EvalPeriodica). Ctrl+C corta y guarda el modelo igual.
 Cada corrida agrega una fila a resultados/registro.csv (el log de todo lo que se probó).
 
@@ -34,7 +35,7 @@ from tqdm import tqdm
 import yaml
 
 from double_dqn import DoubleDQN
-from pastoreo_env import PastoreoEnv, RECOMPENSAS
+from pastoreo_env import OBSERVACIONES, PastoreoEnv, RECOMPENSAS
 
 SEED_EVAL = 20_000  # mapas de evaluación: SEED_EVAL + episodio (distintos de los de medir_strombom.py)
 
@@ -68,6 +69,8 @@ DEFAULTS = dict(
     double=False,
     lr=HIPERPARAMETROS["learning_rate"],
     buffer=HIPERPARAMETROS["buffer_size"],
+    red=HIPERPARAMETROS["policy_kwargs"]["net_arch"],
+    observacion="normalizada",
     nombre=None,
     sin_barra=False,
 )
@@ -82,7 +85,8 @@ COLUMNAS_REGISTRO = [
 
 def nombre_por_defecto(args) -> str:
     """
-    n{ovejas}_{recompensa}_reb{dist}_pas{dist}[_ang{grados}]_k{repetir}[_cerco][_g{gamma}][_mp{max_pasos}][_ddqn]_s{semilla}
+    n{ovejas}_{recompensa}_reb{dist}_pas{dist}[_ang{grados}]_k{repetir}[_cerco][_g{gamma}][_mp{max_pasos}][_ddqn]
+        [_lr{x}][_buf{n}][_red{a}x{b}][_obs{tipo}]_s{semilla}
     Ver modelos/README.md. "orig" = como en el paper (sin el parámetro de currículum).
     gamma y max_pasos solo aparecen si no son los valores por defecto (0.99 y 1000).
     """
@@ -110,6 +114,10 @@ def nombre_por_defecto(args) -> str:
         partes.append(f"lr{args.lr:g}")
     if args.buffer != DEFAULTS["buffer"]:
         partes.append(f"buf{args.buffer}")
+    if list(args.red) != list(DEFAULTS["red"]):
+        partes.append("red" + "x".join(map(str, args.red)))
+    if args.observacion != DEFAULTS["observacion"]:
+        partes.append(f"obs{args.observacion}")
     partes.append(f"s{args.seed}")
     return "_".join(partes)
 
@@ -261,7 +269,19 @@ def kwargs_entorno(params: dict) -> dict:
         dist_inicio_rebano=params["dist_inicio_rebano"],
         repetir_accion=params["repetir_accion"],
         angulo_pastor=params["angulo_pastor"],
+        observacion=params["observacion"],
     )
+
+
+def leer_red(texto: str) -> list[int]:
+    """'256,256' -> [256, 256]: neuronas de cada capa oculta del MLP (todas con ReLU)."""
+    try:
+        capas = [int(x) for x in texto.replace(" ", "").split(",") if x]
+    except ValueError:
+        capas = []
+    if not capas or min(capas) < 1:
+        raise argparse.ArgumentTypeError(f"--red espera enteros positivos separados por coma, por ejemplo 256,256 (llegó '{texto}')")
+    return capas
 
 
 def leer_argumentos():
@@ -304,6 +324,11 @@ def leer_argumentos():
                    help=f"tasa de aprendizaje (default: {d['lr']:g})")
     p.add_argument("--buffer", type=int, default=S,
                    help=f"tamaño del replay buffer, en transiciones (default: {d['buffer']})")
+    p.add_argument("--red", type=leer_red, default=S,
+                   help="neuronas de cada capa oculta, separadas por coma; por ejemplo 256,256 o 64,64,64 "
+                        f"(default: {','.join(map(str, d['red']))})")
+    p.add_argument("--observacion", choices=OBSERVACIONES, default=S,
+                   help=f"cómo se arma la observación, ver OBSERVACIONES en pastoreo_env.py (default: {d['observacion']})")
     p.add_argument("--double", action="store_true", default=S,
                    help="usar Double DQN en vez de DQN (ver double_dqn.py)")
     p.add_argument("--nombre", default=S, help="nombre de la corrida (default: se arma con los argumentos)")
@@ -352,6 +377,8 @@ def main():
 
     # Configuración completa de la corrida, para poder reproducirla (el nombre no lo dice todo)
     fecha = datetime.now().isoformat(timespec="seconds")
+    hiperparametros = {**HIPERPARAMETROS, "learning_rate": args.lr, "buffer_size": args.buffer,
+                       "policy_kwargs": {**HIPERPARAMETROS["policy_kwargs"], "net_arch": list(args.red)}}
     with open(os.path.join(carpeta, f"{nombre}.json"), "w", encoding="utf-8") as f:
         json.dump({
             "nombre": nombre,
@@ -360,7 +387,7 @@ def main():
             "cambios_sobre_escenario": cambios,
             "argumentos": vars(args),
             "entorno": env_kwargs,
-            "hiperparametros_dqn": {**HIPERPARAMETROS, "learning_rate": args.lr, "buffer_size": args.buffer},
+            "hiperparametros_dqn": hiperparametros,
         }, f, indent=2, ensure_ascii=False)
 
     algoritmo = DoubleDQN if args.double else DQN
@@ -370,7 +397,7 @@ def main():
         gamma=args.gamma,
         seed=args.seed,
         verbose=0,
-        **{**HIPERPARAMETROS, "learning_rate": args.lr, "buffer_size": args.buffer},
+        **hiperparametros,
     )
 
     desde = f"escenario '{escenario}'" + (f" con cambios {cambios}" if cambios else "") if escenario else "argumentos"

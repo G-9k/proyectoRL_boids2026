@@ -29,7 +29,17 @@ from Pastoreo_flechitas import (
     WORLD_MIN,
     WORLD_MAX,
     delta_shepherd,
+    r_s,
 )
+
+# Cómo se arma la observación (el vector de 8 números que ve la red):
+#   "normalizada" (desde el 20/11/2026): la distancia pastor-oveja más cercana se divide por r_s = 65 m
+#                 (el radio en el que la oveja siente al pastor). Vale 1 justo en ese borde y ~2 a 130 m.
+#   "original":   la de get_dqn_state() en Pastoreo_flechitas.py, que la divide por 3·r_a = 6 m. Con el
+#                 pastor a 80 m valía ~13, mientras las otras 7 entradas rondan entre -1 y 1; una entrada
+#                 mucho más grande que el resto le complica el aprendizaje a la red.
+# Los modelos entrenados antes del cambio usan "original" (ver_agente.cargar_corrida lo completa solo).
+OBSERVACIONES = ("normalizada", "original")
 
 
 # =====================================================================
@@ -158,7 +168,8 @@ RECOMPENSAS = {
 # =====================================================================
 class PastoreoEnv(gym.Env):
     """
-    Observación: los 8 valores de ManualStrombomEnv.get_dqn_state() (float32).
+    Observación: los 8 valores de ManualStrombomEnv.get_dqn_state() (float32), con la última entrada
+    (distancia a la oveja más cercana) dividida por r_s si observacion="normalizada" (ver OBSERVACIONES).
     Acciones: Discrete(9). 0 = quieto, 1..8 = las 8 direcciones (ver ACTION_VECTORS).
     terminated: el centro del rebaño quedó a menos de `radio_meta` de la meta.
     truncated: se llegó a `max_pasos` sin completar la tarea.
@@ -186,6 +197,8 @@ class PastoreoEnv(gym.Env):
       repetir_accion: cuántos pasos de simulación dura cada acción elegida (frame skip). Con k > 1
              el agente decide cada k pasos; `max_pasos` y info["pasos"] siguen contando pasos de
              simulación. El gamma es por decisión, no por paso de simulación.
+      observacion: "normalizada" (por defecto) u "original"; ver OBSERVACIONES. Un modelo se tiene
+             que usar con la misma observación con la que se entrenó.
     """
 
     metadata = {"render_modes": []}
@@ -202,8 +215,12 @@ class PastoreoEnv(gym.Env):
         dist_inicio_rebano: float | None = None,
         repetir_accion: int = 1,
         angulo_pastor: float | None = None,
+        observacion: str = "normalizada",
     ):
         super().__init__()
+        if observacion not in OBSERVACIONES:
+            raise ValueError(f"Observación desconocida '{observacion}'. Opciones: {OBSERVACIONES}")
+        self.observacion = observacion
         if isinstance(recompensa, str):
             if recompensa not in RECOMPENSAS:
                 raise ValueError(f"Recompensa desconocida '{recompensa}'. Opciones: {list(RECOMPENSAS)}")
@@ -324,7 +341,10 @@ class PastoreoEnv(gym.Env):
         return float(phi(self._medidas)) if phi is not None else 0.0
 
     def _obs(self):
-        return self.sim.get_dqn_state().astype(np.float32)
+        obs = self.sim.get_dqn_state()
+        if self.observacion == "normalizada":
+            obs[7] = self.sim.min_dist_sheep / r_s
+        return obs.astype(np.float32)
 
     def _info(self, exito: bool):
         # "is_success" lo leen los callbacks de evaluación de SB3 para calcular la tasa de éxito.

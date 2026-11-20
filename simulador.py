@@ -89,7 +89,10 @@ class Simulador:
         params = {**DEFAULTS, **self.escenarios[nombre]["config"]}
         kwargs = kwargs_entorno(params)
         # Recompensa y gamma del modelo, para que "Q sin shaping" se calcule con el mismo Phi
-        kwargs.update(recompensa=self.cfg_modelo["entorno"]["recompensa"], gamma=self.cfg_modelo["entorno"]["gamma"])
+        # y la misma observación con la que se entrenó (si no, la red recibe números que nunca vio)
+        entorno_modelo = self.cfg_modelo["entorno"]
+        kwargs.update(recompensa=entorno_modelo["recompensa"], gamma=entorno_modelo["gamma"],
+                      observacion=entorno_modelo["observacion"])
         self.env = PastoreoEnv(**kwargs)
         self.params = params
         self.reiniciar()

@@ -1,6 +1,6 @@
 # Reporte de avance: Track B (entorno, recompensa y líneas base)
 
-**Fecha:** 20/11/2026 (actualizado; incluye la fase 3). **Rama:** `entorno-gym-sb3` (todavía sin mergear a `main`).
+**Fecha:** 20/11/2026 (actualizado; incluye la fase 3 y los cambios de red y observación). **Rama:** `entorno-gym-sb3` (todavía sin mergear a `main`).
 
 ## En una línea
 
@@ -35,9 +35,10 @@ De Javier rescatamos sus hiperparámetros, su script de estadística (`evaluaci�
 |---|---|
 | [pastoreo_env.py](pastoreo_env.py) | Entorno Gymnasium. Recompensa intercambiable (`esparsa`, `potencial_gcm`, `potencial_gcm_tiempo`) y parámetros de currículum: ovejas, distancia del rebaño a la meta y del pastor al rebaño, ángulo del pastor, cerco, repetición de acción |
 | [strombom_politica.py](strombom_politica.py), [medir_strombom.py](medir_strombom.py) | Strömbom como política, continua y discretizada a las 9 acciones |
-| [entrenar_sb3.py](entrenar_sb3.py) | DQN de SB3, evaluado cada tanto en 50 mapas fijos. Escenarios con nombre en [escenarios.yaml](escenarios.yaml) (`python entrenar_sb3.py angulo_90`), registro de todas las corridas en [resultados/registro.csv](resultados/registro.csv), y guarda el **mejor checkpoint** además del modelo final |
+| [entrenar_sb3.py](entrenar_sb3.py) | DQN de SB3, evaluado cada tanto en 50 mapas fijos. Escenarios con nombre en [escenarios.yaml](escenarios.yaml) (`python entrenar_sb3.py angulo_90`), registro de todas las corridas en [resultados/registro.csv](resultados/registro.csv), y guarda el **mejor checkpoint** además del modelo final. Red, buffer, tasa de aprendizaje y observación se eligen por la terminal (`--red 256,256`, `--buffer`, `--lr`, `--observacion`); ver el [README](README.md) |
 | [double_dqn.py](double_dqn.py) | Double DQN como subclase del DQN de SB3: cambia una sola línea del objetivo (la red principal elige la acción y la target la evalúa). Se activa con `--double` |
 | [ver_agente.py](ver_agente.py) | Animación de cualquier modelo entrenado, con el mismo dibujo que `Pastoreo_flechitas.py`. Lee el entorno de la corrida, así que sirve para cualquier escenario. `--strombom` muestra la heurística en los mismos mapas |
+| [simulador.py](simulador.py) | Simulador interactivo: cualquier modelo en cualquier escenario, con pausa, paso a paso, velocidad en pasos por segundo, control manual y los Q de cada acción en vivo |
 | [resultados/](resultados/README.md) | CSV y JSON de cada corrida |
 
 ## Qué encontramos
@@ -133,9 +134,15 @@ Escenario `rebano_80m` (oveja a 80 m, pastor en cualquier lado, sin cerco; Strö
 
 Explicación detallada de todos los conceptos en [GUIA_CONCEPTOS.md](GUIA_CONCEPTOS.md).
 
+### 5. Cambios en la red y la observación (20/11, todavía sin resultados)
+
+- **Red configurable.** La red es un MLP de 2 capas ocultas de 128 neuronas con ReLU (18.825 parámetros). Ahora se cambia con `--red`, por ejemplo `--red 256,256`, y el nombre de la corrida lleva `red256x256`.
+- **Observación normalizada.** La última de las 8 entradas, la distancia a la oveja más cercana, se dividía por 6 m: con el pastor a 80 m valía ~13, y a la distancia del paper, ~25, mientras las otras rondan entre −1 y 1. Una entrada desproporcionada le complica el aprendizaje a la red, y justo fallamos en los escenarios lejanos. Ahora se divide por r_s = 65 m. Es una sospecha, no un resultado: falta medir si cambia algo.
+- **Consecuencia:** todos los modelos anteriores, incluidos los que resuelven `rebano_80m`, usan la observación vieja (`original`). Siguen funcionando en `ver_agente.py` y el simulador, que la detectan solos, pero no se pueden mezclar con modelos nuevos. Para el currículum hay que reentrenar primero `rebano_80m` con la observación nueva, o arrancar con `--observacion original`.
+
 ## Qué sigue
 
-1. **Escenario del paper:** posición 0,5 + penalización doble juntas, y currículum, arrancando desde los modelos que resuelven `rebano_80m`.
+1. **Escenario del paper:** posición 0,5 + penalización doble juntas, y currículum, arrancando desde los modelos que resuelven `rebano_80m`. Antes: repetir `rebano_80m` con la observación normalizada (sección 5), que además dice si normalizar ayuda.
 2. **Atacar el olvido por el lado de la sobreestimación:** bajar la tasa de aprendizaje después de converger, actualizar la red target más despacio, o cortar cuando Q sin shaping pasa de ~1,2.
 3. **Recompensa de compactación para muchas ovejas.** Un círculo de radio f(N) = r_a·N^(2/3) centrado en el centro del rebaño (el umbral que usa Strömbom para pasar de recolectar a arrear). Se gana al entrar una oveja y se descuenta al salir. Hay que escribirlo como shaping basado en potencial, con γ: sin ella, "entrar ahora y salir después" da ganancia neta con descuento y se puede farmear. Tiene un tope natural, porque apretar un rebaño que ya está adentro no suma. Variante continua: penalizar cuánto se pasa cada oveja del círculo.
 4. **Criterio de éxito con muchas ovejas:** pasar a "centro en la meta y rebaño compacto", para que no valga un rebaño partido en dos con el centro justo en la meta.

@@ -36,10 +36,12 @@ n1_potencial_gcm_reb40_pas20_k4_cerco_s0
 | `ddqn` (opcional) | `--double` | entrenado con Double DQN ([double_dqn.py](../double_dqn.py)) en vez del DQN común |
 | `lr{x}` (opcional) | `--lr` | solo aparece si la tasa de aprendizaje no es 0.0005, por ejemplo `lr0.0001` |
 | `buf{n}` (opcional) | `--buffer` | solo aparece si el replay buffer no es de 100000 transiciones, por ejemplo `buf1000000` |
+| `red{a}x{b}…` (opcional) | `--red` | solo aparece si las capas ocultas no son 128,128, por ejemplo `red256x256` o `red64x64x64` |
+| `obs{tipo}` (opcional) | `--observacion` | solo aparece si no es la `normalizada`, por ejemplo `obsoriginal`. Ojo: las corridas anteriores al 20/11/2026 usan la `original` aunque el nombre no lo diga (ver el [README](../README.md#la-observación)) |
 | `v{n}` (al final) | — | ya existía una corrida con el mismo nombre (por ejemplo, la misma configuración con más decisiones); ver `resultados/registro.csv` para saber qué cambió |
 | `s{s}` | semilla | normalmente 0, 1 y 2 |
 
-El nombre **no** incluye todo. Quedan afuera, por ejemplo, la cantidad de pasos de entrenamiento, `max_pasos`, gamma y los hiperparámetros del DQN. Esos datos están en `resultados/entrenamientos/<nombre>.json`.
+El nombre **no** incluye todo. Quedan afuera, por ejemplo, la cantidad de pasos de entrenamiento y los hiperparámetros del DQN que no tienen opción de terminal. Esos datos están en `resultados/entrenamientos/<nombre>.json`.
 
 Si al entrenar se pasa `--nombre`, se usa ese nombre en vez del automático. Conviene evitarlo para no romper el esquema.
 
@@ -52,6 +54,7 @@ from pastoreo_env import PastoreoEnv
 
 nombre = "n1_potencial_gcm_reb20_pas20_k4_cerco_s0"
 config = json.load(open(f"resultados/entrenamientos/{nombre}.json", encoding="utf-8"))
+config["entorno"].setdefault("observacion", "original")   # las corridas viejas no la guardaban
 
 env = PastoreoEnv(**config["entorno"])   # el mismo entorno con el que se entrenó
 model = DQN.load(f"modelos/{nombre}_mejor")   # o f"modelos/{nombre}" para el modelo final
