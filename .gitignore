@@ -1,0 +1,14 @@
+# Python: archivos compilados que se regeneran solos
+__pycache__/
+*.pyc
+
+# Entorno virtual (cada uno lo crea con requirements.txt)
+.venv/
+
+# Modelos entrenados: son binarios y se regeneran con entrenar_sb3.py.
+# Se ignora todo lo de la carpeta salvo su README.
+modelos/*
+!modelos/README.md
+
+# Repositorio de Javier (tiene su propio git): se usa como referencia, no se duplica acá
+PastoreoDqn/
